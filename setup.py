@@ -1,11 +1,11 @@
 import setuptools
 from setuptools import setup
 
-setup(name='pyBASS',
-      version='0.3',
-      description='Bayesian Adaptive Spline Surfaces',
-      url='http://www.github.com/lanl/pyBASS',
-      author='Devin Francom',
+setup(name='pyBayesPPR',
+      version='0.1',
+      description='Bayesian Projection Pursuit Regression',
+      url='http://www.github.com/gqcollins/BayesPPR',
+      author='Gavin Collins',
       author_email='',
       license='BSD-3',
       packages=setuptools.find_packages(),
