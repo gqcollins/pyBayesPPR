@@ -1,18 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Copyright 2020. Triad National Security, LLC. All rights reserved.
-This program was produced under U.S. Government contract 89233218CNA000001 for Los Alamos
-National Laboratory (LANL), which is operated by Triad National Security, LLC for the U.S.
-Department of Energy/National Nuclear Security Administration. All rights in the program are
-reserved by Triad National Security, LLC, and the U.S. Department of Energy/National Nuclear
-Security Administration. The Government is granted for itself and others acting on its behalf a
-nonexclusive, paid-up, irrevocable worldwide license in this material to reproduce, prepare
-derivative works, distribute copies to the public, perform publicly and display publicly, and to permit
-others to do so.
-
-LANL software release C19112
-Author: Devin Francom
+Author: Gavin Collins
 """
 
 import numpy as np
@@ -75,7 +64,7 @@ def comb_index(n, k):
     return index.reshape(-1, k)
 
 
-def dmwnchBass(z_vec, vars_use):
+def dwallenius(z_vec, vars_use):
     """Multivariate Walenius' noncentral hypergeometric density function with some variables fixed"""
     alpha = z_vec[vars_use - 1] / sum(np.delete(z_vec, vars_use))
     j = len(alpha)
@@ -112,7 +101,7 @@ def logProbChangeMod(n_int, vars_use, I_vec, z_vec, p, maxInt):
     else:
         x = np.zeros(p)
         x[vars_use] = 1
-        lprob_vars_noReplace = np.log(dmwnchBass(z_vec, vars_use))
+        lprob_vars_noReplace = np.log(dwallenius(z_vec, vars_use))
         out = (np.log(I_vec[n_int - 1]) + lprob_vars_noReplace - n_int * np.log(2)  # proposal
                + n_int * np.log(2) + np.log(comb(p, n_int)) + np.log(maxInt))  # prior
     return out
@@ -153,7 +142,7 @@ def genBasisChange(knots, signs, vs, tochange_int, xdata):
     return BasisChange(basis, signs_cand, vs, knots_cand)
 
 
-class BassPrior:
+class BPPRPrior:
     """Structure to store prior"""
     def __init__(self, maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2):
         self.maxInt = maxInt
@@ -171,7 +160,7 @@ class BassPrior:
         return
 
 
-class BassData:
+class BPPRData:
     """Structure to store data"""
     def __init__(self, xx, y):
         self.xx_orig = xx
@@ -191,7 +180,7 @@ Samples = namedtuple('Samples', 's2 lam tau nbasis nbasis_models n_int signs vs 
 Sample = namedtuple('Sample', 's2 lam tau nbasis nbasis_models n_int signs vs knots beta')
 
 
-class BassState:
+class BPPRState:
     """The current state of the RJMCMC chain, with methods for getting the log posterior and for updating the state"""
     def __init__(self, data, prior):
         self.data = data
@@ -440,14 +429,14 @@ class BassState:
 
 
 
-class BassModel:
+class BPPRModel:
     """The model structure, including the current RJMCMC state and previous saved states; with methods for saving the
         state, plotting MCMC traces, and predicting"""
     def __init__(self, data, prior, nstore):
         """Get starting state, build storage structures"""
         self.data = data
         self.prior = prior
-        self.state = BassState(self.data, self.prior)
+        self.state = BPPRState(self.data, self.prior)
         self.nstore = nstore
         s2 = np.zeros(nstore)
         lam = np.zeros(nstore)
@@ -570,7 +559,7 @@ class BassModel:
         return out
 
 
-def bass(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=1000, npart=None, g1=0, g2=0,
+def bppr(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=1000, npart=None, g1=0, g2=0,
          s2_lower=0, h1=10, h2=10, a_tau=0.5, b_tau=None, verbose=True):
     """
     **Bayesian Adaptive Spline Surfaces - model fitting**
@@ -602,7 +591,7 @@ def bass(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
     :param a_tau: shape for gamma prior on 1/g in g-prior.
     :param b_tau: scale for gamma prior on 1/g in g-prior.
     :param verbose: boolean for printing progress
-    :return: an object of class BassModel, which includes predict and plot functions.
+    :return: an object of class BPPRModel, which includes predict and plot functions.
     """
 
     t0 = time.time()
@@ -610,12 +599,12 @@ def bass(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
         b_tau = len(y) / 2
     if npart == None:
         npart = min(20, .1 * len(y))
-    bd = BassData(xx, y)
+    bd = BPPRData(xx, y)
     if bd.p < maxInt:
         maxInt = bd.p
-    bp = BassPrior(maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2)
+    bp = BPPRPrior(maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2)
     nstore = int((nmcmc - nburn) / thin)
-    bm = BassModel(bd, bp, nstore)  # if we add tempering, bm should have as many states as temperatures
+    bm = BPPRModel(bd, bp, nstore)  # if we add tempering, bm should have as many states as temperatures
     for i in range(nmcmc):  # rjmcmc loop
         bm.state.update()
         if i > (nburn - 1) and ((i - nburn + 1) % thin) == 0:
@@ -629,7 +618,7 @@ def bass(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
     return bm
 
 
-class PoolBass(object):
+class PoolBPPR(object):
     # adapted from https://stackoverflow.com/questions/1816958/cant-pickle-type-instancemethod-when-using-multiprocessing-pool-map/41959862#41959862 answer by parisjohn
     # somewhat slow collection of results
    def __init__(self, x, y, **kwargs):
@@ -637,8 +626,8 @@ class PoolBass(object):
        self.y = y
        self.kw = kwargs
 
-   def rowbass(self, i):
-       return bass(self.x, self.y[i,:], **self.kw)
+   def rowbppr(self, i):
+       return bppr(self.x, self.y[i,:], **self.kw)
 
    def fit(self, ncores, nrow_y):
       pool = Pool(ncores)
@@ -646,9 +635,9 @@ class PoolBass(object):
       return out
 
    def __call__(self, i):   
-     return self.rowbass(i)
+     return self.rowbppr(i)
 
-class PoolBassPredict(object):
+class PoolBPPRPredict(object):
    def __init__(self, X, mcmc_use, nugget, bm_list):
        self.X = X
        self.mcmc_use = mcmc_use
@@ -667,7 +656,7 @@ class PoolBassPredict(object):
      return self.listpredict(i)
 
 
-class BassBasis:
+class BPPRBasis:
     """Structure for functional response BASS model using a basis decomposition, gets a list of BASS models"""
     def __init__(self, xx, y, basis, newy, y_mean, y_sd, trunc_error, ncores=1, **kwargs):
         """
@@ -684,7 +673,7 @@ class BassBasis:
         :param trunc_error: numpy array of projection truncation errors (dimension qxn)
         :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to
             npc).
-        :param kwargs: optional arguments to bass function.
+        :param kwargs: optional arguments to bppr function.
         """
         self.basis = basis
         self.xx = xx
@@ -696,12 +685,12 @@ class BassBasis:
         self.nbasis = len(basis[0])
 
         if ncores == 1:
-            self.bm_list = list(map(lambda ii: bass(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
+            self.bm_list = list(map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
         else:
             #with Pool(ncores) as pool: # this approach for pathos.multiprocessing
             #    self.bm_list = list(
-            #        pool.map(lambda ii: bass(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
-            temp = PoolBass(self.xx, self.newy, **kwargs)
+            #        pool.map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
+            temp = PoolBPPR(self.xx, self.newy, **kwargs)
             self.bm_list = temp.fit(ncores, self.nbasis)
         return
 
@@ -726,7 +715,7 @@ class BassBasis:
             #with Pool(ncores) as pool:
             #    pred_coefs = list(
             #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
-            temp = PoolBassPredict(X, mcmc_use, nugget, self.bm_list)
+            temp = PoolBPPRPredict(X, mcmc_use, nugget, self.bm_list)
             pred_coefs = temp.predict(ncores, self.nbasis)
         out = np.dot(np.dstack(pred_coefs), self.basis.T)
         out2 = out * self.y_sd + self.y_mean
@@ -774,9 +763,9 @@ class BassBasis:
 
         plt.show()
 
-class BassPCAsetup:
+class BPPRPCAsetup:
     """
-    Wrapper to get principal components that would be used for bassPCA.  Mainly used for checking how many PCs should be used.
+    Wrapper to get principal components that would be used for bpprPCA.  Mainly used for checking how many PCs should be used.
 
     :param y: response matrix (numpy array) of dimension nxq, where n is the number of training examples and q is the number of multivariate/functional
         responses.
@@ -849,9 +838,9 @@ class BassPCAsetup:
 
         plt.show()
 
-def bassPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **kwargs):
+def bpprPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **kwargs):
     """
-    Wrapper to get principal components and call BassBasis, which then calls bass function to fit the BASS model for
+    Wrapper to get principal components and call BPPRBasis, which then calls bppr function to fit the BASS model for
     functional (or multivariate) response data.
 
     :param xx: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and p is
@@ -864,11 +853,11 @@ def bassPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, *
     :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to npc).
     :param center: whether to center the responses before principal component decomposition (boolean).
     :param scale: whether to scale the responses before principal component decomposition (boolean).
-    :param kwargs: optional arguments to bass function.
-    :return: object of class BassBasis, with predict and plot functions.
+    :param kwargs: optional arguments to bppr function.
+    :return: object of class BPPRBasis, with predict and plot functions.
     """
 
-    setup = BassPCAsetup(y, center, scale)
+    setup = BPPRPCAsetup(y, center, scale)
 
     if npc == None:
         cs = np.cumsum(setup.evals) / np.sum(setup.evals) * 100.
@@ -881,9 +870,9 @@ def bassPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, *
     newy = setup.newy[:npc, :]
     trunc_error = np.dot(basis, newy) - setup.y_scale.T
 
-    print('\rStarting bassPCA with {:d} components, using {:d} cores.'.format(npc, ncores))
+    print('\rStarting bpprPCA with {:d} components, using {:d} cores.'.format(npc, ncores))
 
-    return BassBasis(xx, y, basis, newy, setup.y_mean, setup.y_sd, trunc_error, ncores, **kwargs)
+    return BPPRBasis(xx, y, basis, newy, setup.y_mean, setup.y_sd, trunc_error, ncores, **kwargs)
 
 
 ######################################################
@@ -903,7 +892,7 @@ if __name__ == '__main__':
         xx = np.random.rand(1000, p)
         y = f(x) + np.random.normal(size=n)
 
-        mod = bass(x, y, nmcmc=10000, nburn=9000)
+        mod = bppr(x, y, nmcmc=10000, nburn=9000)
         pred = mod.predict(xx, mcmc_use=np.array([1, 100]), nugget=True)
 
         mod.plot()
@@ -924,7 +913,7 @@ if __name__ == '__main__':
         e = np.random.normal(size=n * len(tt))
         y = np.apply_along_axis(f2, 1, x)  # + e.reshape(n,len(tt))
 
-        modf = bassPCA(x, y, ncores=2, percVar=99.99)
+        modf = bpprPCA(x, y, ncores=2, percVar=99.99)
         modf.plot()
 
         pred = modf.predict(xx, mcmc_use=np.array([1,100]), nugget=True)
