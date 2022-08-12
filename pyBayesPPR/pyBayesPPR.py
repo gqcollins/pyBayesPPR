@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from itertools import combinations, chain
 from scipy.special import comb
 from collections import namedtuple
-#from pathos.multiprocessing import ProcessingPool as Pool
+from pathos.multiprocessing import ProcessingPool as Pool
 from multiprocessing import Pool
 import time
 
@@ -142,7 +142,7 @@ def genBasisChange(knots, signs, vs, tochange_int, xdata):
     return BasisChange(basis, signs_cand, vs, knots_cand)
 
 
-class BPPRPrior:
+class bpprPrior:
     """Structure to store prior"""
     def __init__(self, maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2):
         self.maxInt = maxInt
@@ -160,7 +160,7 @@ class BPPRPrior:
         return
 
 
-class BPPRData:
+class bpprData:
     """Structure to store data"""
     def __init__(self, xx, y):
         self.xx_orig = xx
@@ -180,7 +180,7 @@ Samples = namedtuple('Samples', 's2 lam tau nbasis nbasis_models n_int signs vs 
 Sample = namedtuple('Sample', 's2 lam tau nbasis nbasis_models n_int signs vs knots beta')
 
 
-class BPPRState:
+class bpprState:
     """The current state of the RJMCMC chain, with methods for getting the log posterior and for updating the state"""
     def __init__(self, data, prior):
         self.data = data
@@ -429,14 +429,14 @@ class BPPRState:
 
 
 
-class BPPRModel:
+class bpprModel:
     """The model structure, including the current RJMCMC state and previous saved states; with methods for saving the
         state, plotting MCMC traces, and predicting"""
     def __init__(self, data, prior, nstore):
         """Get starting state, build storage structures"""
         self.data = data
         self.prior = prior
-        self.state = BPPRState(self.data, self.prior)
+        self.state = bpprState(self.data, self.prior)
         self.nstore = nstore
         s2 = np.zeros(nstore)
         lam = np.zeros(nstore)
@@ -591,7 +591,7 @@ def bppr(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
     :param a_tau: shape for gamma prior on 1/g in g-prior.
     :param b_tau: scale for gamma prior on 1/g in g-prior.
     :param verbose: boolean for printing progress
-    :return: an object of class BPPRModel, which includes predict and plot functions.
+    :return: an object of class bpprModel, which includes predict and plot functions.
     """
 
     t0 = time.time()
@@ -599,12 +599,12 @@ def bppr(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
         b_tau = len(y) / 2
     if npart == None:
         npart = min(20, .1 * len(y))
-    bd = BPPRData(xx, y)
+    bd = bpprData(xx, y)
     if bd.p < maxInt:
         maxInt = bd.p
-    bp = BPPRPrior(maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2)
+    bp = bpprPrior(maxInt, maxBasis, npart, g1, g2, s2_lower, h1, h2, a_tau, b_tau, w1, w2)
     nstore = int((nmcmc - nburn) / thin)
-    bm = BPPRModel(bd, bp, nstore)  # if we add tempering, bm should have as many states as temperatures
+    bm = bpprModel(bd, bp, nstore)  # if we add tempering, bm should have as many states as temperatures
     for i in range(nmcmc):  # rjmcmc loop
         bm.state.update()
         if i > (nburn - 1) and ((i - nburn + 1) % thin) == 0:
@@ -618,262 +618,262 @@ def bppr(xx, y, nmcmc=10000, nburn=9000, thin=1, w1=5, w2=5, maxInt=3, maxBasis=
     return bm
 
 
-class PoolBPPR(object):
-    # adapted from https://stackoverflow.com/questions/1816958/cant-pickle-type-instancemethod-when-using-multiprocessing-pool-map/41959862#41959862 answer by parisjohn
-    # somewhat slow collection of results
-   def __init__(self, x, y, **kwargs):
-       self.x = x
-       self.y = y
-       self.kw = kwargs
-
-   def rowbppr(self, i):
-       return bppr(self.x, self.y[i,:], **self.kw)
-
-   def fit(self, ncores, nrow_y):
-      pool = Pool(ncores)
-      out = pool.map(self, range(nrow_y))
-      return out
-
-   def __call__(self, i):   
-     return self.rowbppr(i)
-
-class PoolBPPRPredict(object):
-   def __init__(self, X, mcmc_use, nugget, bm_list):
-       self.X = X
-       self.mcmc_use = mcmc_use
-       self.nugget = nugget
-       self.bm_list = bm_list
-
-   def listpredict(self, i):
-       return self.bm_list[i].predict(self.X, self.mcmc_use, self.nugget)
-
-   def predict(self, ncores, nlist):
-      pool = Pool(ncores)
-      out = pool.map(self, range(nlist))
-      return out
-
-   def __call__(self, i):   
-     return self.listpredict(i)
-
-
-class BPPRBasis:
-    """Structure for functional response BASS model using a basis decomposition, gets a list of BASS models"""
-    def __init__(self, xx, y, basis, newy, y_mean, y_sd, trunc_error, ncores=1, **kwargs):
-        """
-        Fit BASS model with multivariate/functional response by projecting onto user specified basis.
-
-        :param xx: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and
-            p is the number of inputs (features).
-        :param y: response matrix (numpy array) of dimension nxq, where q is the number of multivariate/functional
-            responses.
-        :param basis: matrix (numpy array) of basis functions of dimension qxk.
-        :param newy: matrix (numpy array) of y projected onto basis, dimension kxn.
-        :param y_mean: vector (numpy array) of length q with the mean if y was centered before obtaining newy.
-        :param y_sd: vector (numpy array) of length q with the standard deviation if y was scaled before obtaining newy.
-        :param trunc_error: numpy array of projection truncation errors (dimension qxn)
-        :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to
-            npc).
-        :param kwargs: optional arguments to bppr function.
-        """
-        self.basis = basis
-        self.xx = xx
-        self.y = y
-        self.newy = newy
-        self.y_mean = y_mean
-        self.y_sd = y_sd
-        self.trunc_error = trunc_error
-        self.nbasis = len(basis[0])
-
-        if ncores == 1:
-            self.bm_list = list(map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
-        else:
-            #with Pool(ncores) as pool: # this approach for pathos.multiprocessing
-            #    self.bm_list = list(
-            #        pool.map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
-            temp = PoolBPPR(self.xx, self.newy, **kwargs)
-            self.bm_list = temp.fit(ncores, self.nbasis)
-        return
-
-    def predict(self, X, mcmc_use=None, nugget=False, trunc_error=False, ncores=1):
-        """
-        Predict the functional response at new inputs.
-
-        :param X: matrix (numpy array) of predictors with dimension nxp, where n is the number of prediction points and
-            p is the number of inputs (features). p must match the number of training inputs, and the order of the
-            columns must also match.
-        :param mcmc_use: which MCMC samples to use (list of integers of length m).  Defaults to all MCMC samples.
-        :param nugget: whether to use the error variance when predicting.  If False, predictions are for mean function.
-        :param trunc_error: whether to use truncation error when predicting.
-        :param ncores: number of cores to use while predicting (integer).  In almost all cases, use ncores=1.
-        :return: a numpy array of predictions with dimension mxnxq, with first dimension corresponding to MCMC samples,
-            second dimension corresponding to prediction points, and third dimension corresponding to
-            multivariate/functional response.
-        """
-        if ncores == 1:
-            pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
-        else:
-            #with Pool(ncores) as pool:
-            #    pred_coefs = list(
-            #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
-            temp = PoolBPPRPredict(X, mcmc_use, nugget, self.bm_list)
-            pred_coefs = temp.predict(ncores, self.nbasis)
-        out = np.dot(np.dstack(pred_coefs), self.basis.T)
-        out2 = out * self.y_sd + self.y_mean
-        if trunc_error:
-            out2 += self.trunc_error[:, np.random.choice(np.arange(self.trunc_error.shape[1]), size=np.prod(out.shape[:2]), replace=True)].reshape(out.shape)
-        return out2
-
-    def plot(self):
-        """
-        Trace plots and predictions/residuals
-
-        * top left - trace plot of number of basis functions (excluding burn-in and thinning) for each BASS model
-        * top right - trace plot of residual variance for each BASS model
-        * bottom left - training data against predictions
-        * bottom right - histogram of residuals (posterior mean).
-        """
-
-        fig = plt.figure()
-
-        ax = fig.add_subplot(2, 2, 1)
-        for i in range(self.nbasis):
-            plt.plot(self.bm_list[i].samples.nbasis)
-        plt.ylabel("number of basis functions")
-        plt.xlabel("MCMC iteration (post-burn)")
-
-        ax = fig.add_subplot(2, 2, 2)
-        for i in range(self.nbasis):
-            plt.plot(self.bm_list[i].samples.s2)
-        plt.ylabel("error variance")
-        plt.xlabel("MCMC iteration (post-burn)")
-
-        ax = fig.add_subplot(2, 2, 3)
-        yhat = self.predict(self.bm_list[0].data.xx_orig).mean(axis=0)  # posterior predictive mean
-        plt.scatter(self.y, yhat)
-        abline(1, 0)
-        plt.xlabel("observed")
-        plt.ylabel("posterior prediction")
-
-        ax = fig.add_subplot(2, 2, 4)
-        plt.hist((self.y - yhat).reshape(np.prod(yhat.shape)), color="skyblue", ec="white", density=True)
-        plt.xlabel("residuals")
-        plt.ylabel("density")
-
-        fig.tight_layout()
-
-        plt.show()
-
-class BPPRPCAsetup:
-    """
-    Wrapper to get principal components that would be used for bpprPCA.  Mainly used for checking how many PCs should be used.
-
-    :param y: response matrix (numpy array) of dimension nxq, where n is the number of training examples and q is the number of multivariate/functional
-        responses.
-    :param npc: number of principal components to use (integer, optional if percVar is specified).
-    :param percVar: percent (between 0 and 100) of variation to explain when choosing number of principal components
-        (if npc=None).
-    :param center: whether to center the responses before principal component decomposition (boolean).
-    :param scale: whether to scale the responses before principal component decomposition (boolean).
-    :return: object with plot method.
-    """
-    def __init__(self, y, center=True, scale=False):
-        self.y = y
-        self.y_mean = 0
-        self.y_sd = 1
-        if center:
-            self.y_mean = np.mean(y, axis=0)
-        if scale:
-            self.y_sd = np.std(y, axis=0)
-            self.y_sd[self.y_sd == 0] = 1
-        self.y_scale = np.apply_along_axis(lambda row: (row - self.y_mean) / self.y_sd, 1, y)
-        #decomp = np.linalg.svd(y_scale.T)
-        U, s, V = np.linalg.svd(self.y_scale.T)
-        self.evals = s ** 2
-        self.basis = np.dot(U, np.diag(s))
-        self.newy = V
-        return
-    
-    def plot(self, npc=None, percVar=None):
-        """
-        Plot of principal components, eigenvalues
-
-        * left - principal components; grey are excluded by setting of npc or percVar
-        * right - eigenvalues (squared singular values), colored according to principal components
-        """
-
-        cs = np.cumsum(self.evals) / np.sum(self.evals) * 100.
-
-        if npc == None and percVar == 100:
-            npc = len(self.evals)
-        if npc == None and percVar is not None:
-            npc = np.where(cs >= percVar)[0][0] + 1
-        if npc == None or npc > len(self.evals):
-            npc = len(self.evals)
-
-        fig = plt.figure()
-
-        cmap = plt.get_cmap("tab10")
-
-        ax = fig.add_subplot(1, 2, 1)
-        if npc < len(self.evals):
-            plt.plot(self.basis[:, npc:], color='grey')
-        for i in range(npc):
-            plt.plot(self.basis[:, i], color=cmap(i%10))
-        plt.ylabel("principal components")
-        plt.xlabel("multivariate/functional index")
-
-        ax = fig.add_subplot(1, 2, 2)
-        x = np.arange(len(self.evals)) + 1
-        if npc < len(self.evals):
-            plt.scatter(x[npc:], cs[npc:], facecolors='none', color='grey')
-        for i in range(npc):
-            plt.scatter(x[i], cs[i], facecolors='none', color=cmap(i%10))
-        plt.axvline(npc)
-        #if percVar is not None:
-        #    plt.axhline(percVar)
-        plt.ylabel("cumulative eigenvalues (percent variance)")
-        plt.xlabel("index")
-
-        fig.tight_layout()
-
-        plt.show()
-
-def bpprPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **kwargs):
-    """
-    Wrapper to get principal components and call BPPRBasis, which then calls bppr function to fit the BASS model for
-    functional (or multivariate) response data.
-
-    :param xx: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and p is
-        the number of inputs (features).
-    :param y: response matrix (numpy array) of dimension nxq, where q is the number of multivariate/functional
-        responses.
-    :param npc: number of principal components to use (integer, optional if percVar is specified).
-    :param percVar: percent (between 0 and 100) of variation to explain when choosing number of principal components
-        (if npc=None).
-    :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to npc).
-    :param center: whether to center the responses before principal component decomposition (boolean).
-    :param scale: whether to scale the responses before principal component decomposition (boolean).
-    :param kwargs: optional arguments to bppr function.
-    :return: object of class BPPRBasis, with predict and plot functions.
-    """
-
-    setup = BPPRPCAsetup(y, center, scale)
-
-    if npc == None:
-        cs = np.cumsum(setup.evals) / np.sum(setup.evals) * 100.
-        npc = np.where(cs > percVar)[0][0] + 1
-
-    if ncores > npc:
-        ncores = npc
-
-    basis = setup.basis[:, :npc]
-    newy = setup.newy[:npc, :]
-    trunc_error = np.dot(basis, newy) - setup.y_scale.T
-
-    print('\rStarting bpprPCA with {:d} components, using {:d} cores.'.format(npc, ncores))
-
-    return BPPRBasis(xx, y, basis, newy, setup.y_mean, setup.y_sd, trunc_error, ncores, **kwargs)
-
+# class PoolBPPR(object):
+#     # adapted from https://stackoverflow.com/questions/1816958/cant-pickle-type-instancemethod-when-using-multiprocessing-pool-map/41959862#41959862 answer by parisjohn
+#     # somewhat slow collection of results
+#    def __init__(self, x, y, **kwargs):
+#        self.x = x
+#        self.y = y
+#        self.kw = kwargs
+# 
+#    def rowbppr(self, i):
+#        return bppr(self.x, self.y[i,:], **self.kw)
+# 
+#    def fit(self, ncores, nrow_y):
+#       pool = Pool(ncores)
+#       out = pool.map(self, range(nrow_y))
+#       return out
+# 
+#    def __call__(self, i):   
+#      return self.rowbppr(i)
+# 
+# class PoolBPPRPredict(object):
+#    def __init__(self, X, mcmc_use, nugget, bm_list):
+#        self.X = X
+#        self.mcmc_use = mcmc_use
+#        self.nugget = nugget
+#        self.bm_list = bm_list
+# 
+#    def listpredict(self, i):
+#        return self.bm_list[i].predict(self.X, self.mcmc_use, self.nugget)
+# 
+#    def predict(self, ncores, nlist):
+#       pool = Pool(ncores)
+#       out = pool.map(self, range(nlist))
+#       return out
+# 
+#    def __call__(self, i):   
+#      return self.listpredict(i)
+# 
+# 
+# class bpprBasis:
+#     """Structure for functional response BASS model using a basis decomposition, gets a list of BASS models"""
+#     def __init__(self, xx, y, basis, newy, y_mean, y_sd, trunc_error, ncores=1, **kwargs):
+#         """
+#         Fit BASS model with multivariate/functional response by projecting onto user specified basis.
+# 
+#         :param xx: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and
+#             p is the number of inputs (features).
+#         :param y: response matrix (numpy array) of dimension nxq, where q is the number of multivariate/functional
+#             responses.
+#         :param basis: matrix (numpy array) of basis functions of dimension qxk.
+#         :param newy: matrix (numpy array) of y projected onto basis, dimension kxn.
+#         :param y_mean: vector (numpy array) of length q with the mean if y was centered before obtaining newy.
+#         :param y_sd: vector (numpy array) of length q with the standard deviation if y was scaled before obtaining newy.
+#         :param trunc_error: numpy array of projection truncation errors (dimension qxn)
+#         :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to
+#             npc).
+#         :param kwargs: optional arguments to bppr function.
+#         """
+#         self.basis = basis
+#         self.xx = xx
+#         self.y = y
+#         self.newy = newy
+#         self.y_mean = y_mean
+#         self.y_sd = y_sd
+#         self.trunc_error = trunc_error
+#         self.nbasis = len(basis[0])
+# 
+#         if ncores == 1:
+#             self.bm_list = list(map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
+#         else:
+#             #with Pool(ncores) as pool: # this approach for pathos.multiprocessing
+#             #    self.bm_list = list(
+#             #        pool.map(lambda ii: bppr(self.xx, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
+#             temp = PoolBPPR(self.xx, self.newy, **kwargs)
+#             self.bm_list = temp.fit(ncores, self.nbasis)
+#         return
+# 
+#     def predict(self, X, mcmc_use=None, nugget=False, trunc_error=False, ncores=1):
+#         """
+#         Predict the functional response at new inputs.
+# 
+#         :param X: matrix (numpy array) of predictors with dimension nxp, where n is the number of prediction points and
+#             p is the number of inputs (features). p must match the number of training inputs, and the order of the
+#             columns must also match.
+#         :param mcmc_use: which MCMC samples to use (list of integers of length m).  Defaults to all MCMC samples.
+#         :param nugget: whether to use the error variance when predicting.  If False, predictions are for mean function.
+#         :param trunc_error: whether to use truncation error when predicting.
+#         :param ncores: number of cores to use while predicting (integer).  In almost all cases, use ncores=1.
+#         :return: a numpy array of predictions with dimension mxnxq, with first dimension corresponding to MCMC samples,
+#             second dimension corresponding to prediction points, and third dimension corresponding to
+#             multivariate/functional response.
+#         """
+#         if ncores == 1:
+#             pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
+#         else:
+#             #with Pool(ncores) as pool:
+#             #    pred_coefs = list(
+#             #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
+#             temp = PoolBPPRPredict(X, mcmc_use, nugget, self.bm_list)
+#             pred_coefs = temp.predict(ncores, self.nbasis)
+#         out = np.dot(np.dstack(pred_coefs), self.basis.T)
+#         out2 = out * self.y_sd + self.y_mean
+#         if trunc_error:
+#             out2 += self.trunc_error[:, np.random.choice(np.arange(self.trunc_error.shape[1]), size=np.prod(out.shape[:2]), replace=True)].reshape(out.shape)
+#         return out2
+# 
+#     def plot(self):
+#         """
+#         Trace plots and predictions/residuals
+# 
+#         * top left - trace plot of number of basis functions (excluding burn-in and thinning) for each BASS model
+#         * top right - trace plot of residual variance for each BASS model
+#         * bottom left - training data against predictions
+#         * bottom right - histogram of residuals (posterior mean).
+#         """
+# 
+#         fig = plt.figure()
+# 
+#         ax = fig.add_subplot(2, 2, 1)
+#         for i in range(self.nbasis):
+#             plt.plot(self.bm_list[i].samples.nbasis)
+#         plt.ylabel("number of basis functions")
+#         plt.xlabel("MCMC iteration (post-burn)")
+# 
+#         ax = fig.add_subplot(2, 2, 2)
+#         for i in range(self.nbasis):
+#             plt.plot(self.bm_list[i].samples.s2)
+#         plt.ylabel("error variance")
+#         plt.xlabel("MCMC iteration (post-burn)")
+# 
+#         ax = fig.add_subplot(2, 2, 3)
+#         yhat = self.predict(self.bm_list[0].data.xx_orig).mean(axis=0)  # posterior predictive mean
+#         plt.scatter(self.y, yhat)
+#         abline(1, 0)
+#         plt.xlabel("observed")
+#         plt.ylabel("posterior prediction")
+# 
+#         ax = fig.add_subplot(2, 2, 4)
+#         plt.hist((self.y - yhat).reshape(np.prod(yhat.shape)), color="skyblue", ec="white", density=True)
+#         plt.xlabel("residuals")
+#         plt.ylabel("density")
+# 
+#         fig.tight_layout()
+# 
+#         plt.show()
+# 
+# class bpprPCAsetup:
+#     """
+#     Wrapper to get principal components that would be used for bpprPCA.  Mainly used for checking how many PCs should be used.
+# 
+#     :param y: response matrix (numpy array) of dimension nxq, where n is the number of training examples and q is the number of multivariate/functional
+#         responses.
+#     :param npc: number of principal components to use (integer, optional if percVar is specified).
+#     :param percVar: percent (between 0 and 100) of variation to explain when choosing number of principal components
+#         (if npc=None).
+#     :param center: whether to center the responses before principal component decomposition (boolean).
+#     :param scale: whether to scale the responses before principal component decomposition (boolean).
+#     :return: object with plot method.
+#     """
+#     def __init__(self, y, center=True, scale=False):
+#         self.y = y
+#         self.y_mean = 0
+#         self.y_sd = 1
+#         if center:
+#             self.y_mean = np.mean(y, axis=0)
+#         if scale:
+#             self.y_sd = np.std(y, axis=0)
+#             self.y_sd[self.y_sd == 0] = 1
+#         self.y_scale = np.apply_along_axis(lambda row: (row - self.y_mean) / self.y_sd, 1, y)
+#         #decomp = np.linalg.svd(y_scale.T)
+#         U, s, V = np.linalg.svd(self.y_scale.T)
+#         self.evals = s ** 2
+#         self.basis = np.dot(U, np.diag(s))
+#         self.newy = V
+#         return
+#     
+#     def plot(self, npc=None, percVar=None):
+#         """
+#         Plot of principal components, eigenvalues
+# 
+#         * left - principal components; grey are excluded by setting of npc or percVar
+#         * right - eigenvalues (squared singular values), colored according to principal components
+#         """
+# 
+#         cs = np.cumsum(self.evals) / np.sum(self.evals) * 100.
+# 
+#         if npc == None and percVar == 100:
+#             npc = len(self.evals)
+#         if npc == None and percVar is not None:
+#             npc = np.where(cs >= percVar)[0][0] + 1
+#         if npc == None or npc > len(self.evals):
+#             npc = len(self.evals)
+# 
+#         fig = plt.figure()
+# 
+#         cmap = plt.get_cmap("tab10")
+# 
+#         ax = fig.add_subplot(1, 2, 1)
+#         if npc < len(self.evals):
+#             plt.plot(self.basis[:, npc:], color='grey')
+#         for i in range(npc):
+#             plt.plot(self.basis[:, i], color=cmap(i%10))
+#         plt.ylabel("principal components")
+#         plt.xlabel("multivariate/functional index")
+# 
+#         ax = fig.add_subplot(1, 2, 2)
+#         x = np.arange(len(self.evals)) + 1
+#         if npc < len(self.evals):
+#             plt.scatter(x[npc:], cs[npc:], facecolors='none', color='grey')
+#         for i in range(npc):
+#             plt.scatter(x[i], cs[i], facecolors='none', color=cmap(i%10))
+#         plt.axvline(npc)
+#         #if percVar is not None:
+#         #    plt.axhline(percVar)
+#         plt.ylabel("cumulative eigenvalues (percent variance)")
+#         plt.xlabel("index")
+# 
+#         fig.tight_layout()
+# 
+#         plt.show()
+# 
+# def bpprPCA(xx, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **kwargs):
+#     """
+#     Wrapper to get principal components and call bpprBasis, which then calls bppr function to fit the BASS model for
+#     functional (or multivariate) response data.
+# 
+#     :param xx: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and p is
+#         the number of inputs (features).
+#     :param y: response matrix (numpy array) of dimension nxq, where q is the number of multivariate/functional
+#         responses.
+#     :param npc: number of principal components to use (integer, optional if percVar is specified).
+#     :param percVar: percent (between 0 and 100) of variation to explain when choosing number of principal components
+#         (if npc=None).
+#     :param ncores: number of threads to use when fitting independent BASS models (integer less than or equal to npc).
+#     :param center: whether to center the responses before principal component decomposition (boolean).
+#     :param scale: whether to scale the responses before principal component decomposition (boolean).
+#     :param kwargs: optional arguments to bppr function.
+#     :return: object of class bpprBasis, with predict and plot functions.
+#     """
+# 
+#     setup = bpprPCAsetup(y, center, scale)
+# 
+#     if npc == None:
+#         cs = np.cumsum(setup.evals) / np.sum(setup.evals) * 100.
+#         npc = np.where(cs > percVar)[0][0] + 1
+# 
+#     if ncores > npc:
+#         ncores = npc
+# 
+#     basis = setup.basis[:, :npc]
+#     newy = setup.newy[:npc, :]
+#     trunc_error = np.dot(basis, newy) - setup.y_scale.T
+# 
+#     print('\rStarting bpprPCA with {:d} components, using {:d} cores.'.format(npc, ncores))
+# 
+#     return bpprBasis(xx, y, basis, newy, setup.y_mean, setup.y_sd, trunc_error, ncores, **kwargs)
+# 
 
 ######################################################
 ## test it out
@@ -882,7 +882,7 @@ if __name__ == '__main__':
 
     if False:
         def f(x):
-            out = 10. * np.sin(2*np.pi * x[:, 0] * x[:, 1]) + 20. * (x[:, 2] - .5) ** 2 + 10 * x[:, 3] + 5. * x[:, 4]
+            out = 10.0 * np.sin(2*np.pi * x[:, 0] * x[:, 1]) + 20.0 * (x[:, 2] - 0.5) ** 2 + 10.0 * x[:, 3] + 5.0 * x[:, 4]
             return out
 
 
@@ -899,28 +899,28 @@ if __name__ == '__main__':
 
         print(np.var(mod.predict(xx).mean(axis=0)-f(xx)))
 
-    if False:
-        def f2(x):
-            out = 10. * np.sin(np.pi * tt * x[1]) + 20. * (x[2] - .5) ** 2 + 10 * x[3] + 5. * x[4]
-            return out
-
-
-        tt = np.linspace(0, 1, 50)
-        n = 500
-        p = 9
-        x = np.random.rand(n, p) - .5
-        xx = np.random.rand(1000, p) - .5
-        e = np.random.normal(size=n * len(tt))
-        y = np.apply_along_axis(f2, 1, x)  # + e.reshape(n,len(tt))
-
-        modf = bpprPCA(x, y, ncores=2, percVar=99.99)
-        modf.plot()
-
-        pred = modf.predict(xx, mcmc_use=np.array([1,100]), nugget=True)
-
-        ind = 11
-        plt.plot(pred[:,ind,:].T)
-        plt.plot(f2(xx[ind,]),'bo')
-
-        plt.plot(np.apply_along_axis(f2, 1, xx), np.mean(pred,axis=0))
-        abline(1,0)
+#     if False:
+#         def f2(x):
+#             out = 10. * np.sin(np.pi * tt * x[1]) + 20. * (x[2] - .5) ** 2 + 10 * x[3] + 5. * x[4]
+#             return out
+# 
+# 
+#         tt = np.linspace(0, 1, 50)
+#         n = 500
+#         p = 9
+#         x = np.random.rand(n, p) - .5
+#         xx = np.random.rand(1000, p) - .5
+#         e = np.random.normal(size=n * len(tt))
+#         y = np.apply_along_axis(f2, 1, x)  # + e.reshape(n,len(tt))
+# 
+#         modf = bpprPCA(x, y, ncores=2, percVar=99.99)
+#         modf.plot()
+# 
+#         pred = modf.predict(xx, mcmc_use=np.array([1,100]), nugget=True)
+# 
+#         ind = 11
+#         plt.plot(pred[:,ind,:].T)
+#         plt.plot(f2(xx[ind,]),'bo')
+# 
+#         plt.plot(np.apply_along_axis(f2, 1, xx), np.mean(pred,axis=0))
+#         abline(1,0)
