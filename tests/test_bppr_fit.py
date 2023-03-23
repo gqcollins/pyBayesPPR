@@ -17,7 +17,7 @@ def test_bppr_fit():
     y = f(x) + np.random.randn(n) * 0.1  # response (training set) with noise.
 
     # fit BPPR model with RJMCMC
-    mod = pb.bppr(x, y, nmcmc=10000, nburn=9000)
+    mod = pb.bppr(x, y)
 
     # predict at new inputs (xnew)
     xnew = np.random.rand(1000, p)
