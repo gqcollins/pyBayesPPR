@@ -451,10 +451,11 @@ class bpprState:
                 self.basis[:, tochange_slice] = cand.basis
 
         shapeVarResid = self.data.n / 2
-        scaleVarResid = (self.data.ssy - np.dot(self.bhat.T, self.Bty[0:self.nBasis]) / (1 + self.varCoefs)) / 2
-        if scaleVarResid < 0:
-            scaleVarResid = 1.e-10
-            
+        #scaleVarResid = (self.data.ssy - np.dot(self.bhat.T, self.Bty[0:self.nBasis]) / (1 + self.varCoefs)) / 2
+        #if scaleVarResid < 0:
+        #    scaleVarResid = 1.e-10
+
+        scaleVarResid = self.sse/2
         self.sdResid = np.sqrt(1 / np.random.gamma(shapeVarResid, 1 / scaleVarResid, size=1))
 
         self.coefs = self.bhat * self.varCoefs / (1 + self.varCoefs) + np.dot(self.R_inv_t, np.random.normal(size=self.nBasis)) * np.sqrt(
@@ -463,7 +464,7 @@ class bpprState:
         temp = np.dot(self.R, self.coefs)
         qf2 = np.dot(temp, temp)
         shapeVarCoefs = self.prior.shapeVarCoefs + self.nBasis / 2
-        scaleVarCoefs = self.prior.scaleVarCoefs + qf2 / self.nBasis / 2
+        scaleVarCoefs = self.prior.scaleVarCoefs + qf2 / self.sdResid**2 / 2
         self.varCoefs = 1/np.random.gamma(shapeVarCoefs, 1 / scaleVarCoefs, size=1)
 
 
