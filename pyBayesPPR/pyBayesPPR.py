@@ -226,7 +226,7 @@ class bpprState:
         self.wfeat = np.ones(data.p) * prior.wfeat
         self.wfeat_norm = self.wfeat / np.sum(self.wfeat)
         self.basis = np.ones([data.n, 1])
-        self.maxPropZero = 1 - minNonzero / data.n
+        self.maxPropZero = 1 - prior.minNonzero / data.n
         self.nBasis = 1
         self.projDir = np.zeros([prior.nRidgeMax, prior.nActMax])
         self.quantKnots = np.linspace(0., 1., prior.dfSpline + 1) # All knots except knot0
@@ -586,7 +586,7 @@ class bpprModel:
         if len(X.shape)==1:
             X = X[None, :]
 
-        Xs = normalize(X, self.Xmn, self.Xsd)
+        Xs = normalize(X, self.data.Xmn, self.data.Xsd)
         if np.any(mcmc_use == None):
             mcmc_use = np.array(range(self.nstore))
         out = np.zeros([len(mcmc_use), len(Xs)])
@@ -659,14 +659,13 @@ def bppr(X, y, nPost = 10000, nBurn = 9000, keepEvery = 1, nRidgeMean = 10, nAct
         minNonzero = min(20, .1 * bd.n)
         
     if scaleProjDirProp == None:
-        precProjDirProp = 1000
-        
-    elif scaleProjDirProp > 1 || scaleProjDirProp <= 0:
+        precProjDirProp = 1000  
+    elif scaleProjDirProp > 1 or scaleProjDirProp <= 0:
         return
     
     else:
         temp = 1/scaleProjDirProp
-        precProjDirProp = (temp - 1) + sqrt(temp * (temp - 1))
+        precProjDirProp = (temp - 1) + np.sqrt(temp * (temp - 1))
 
     if nRidgeMax == None:
         nRidgeMax = int(min(150, np.floor(bd.n/dfSpline) - 2))
