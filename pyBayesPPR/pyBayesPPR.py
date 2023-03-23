@@ -300,7 +300,7 @@ class bpprState:
             
             logMH = (cand.logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
                      logMHbdCand - self.logMHbd + # Probability of birth
-                     -self.data.n/2 * (np.log(self.sse) - np.log(sseCand)) - self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
+                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) - self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
                      np.log(self.prior.nRidgeMean/(self.nRidge + 1))) # prior
 
             if np.log(np.random.rand()) < logMH:
@@ -355,7 +355,7 @@ class bpprState:
 
             logMH = (logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
                      logMHbdCand - self.logMHbd + # Probability of death
-                     -self.data.n/2 * (np.log(self.sse) - np.log(sseCand)) + self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
+                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) + self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
                      np.log(self.nRidge/self.prior.nRidgeMean)) # prior
 
             if np.log(np.random.rand()) < logMH:
@@ -431,7 +431,7 @@ class bpprState:
             
             sseCand = self.data.ssy - self.varCoefs / (1 + self.varCoefs) * qf_cand.qf
             
-            logMH = -self.data.n/2 * (np.log(self.sse) - np.log(sseCand)) # likelihood
+            logMH = -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) # likelihood
 
             if np.log(np.random.rand()) < logMH:
                 self.cmod = True
