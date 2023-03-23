@@ -753,16 +753,16 @@ class bpprBasis:
         self.y_mean = y_mean
         self.y_sd = y_sd
         self.trunc_error = trunc_error
-        self.nRidge = len(basis[0])
+        self.nbasis = len(basis[0])
 
         if ncores == 1:
-            self.bm_list = list(map(lambda ii: bppr(self.X, self.newy[ii, :], **kwargs), list(range(self.nRidge))))
+            self.bm_list = list(map(lambda ii: bppr(self.X, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
         else:
             #with Pool(ncores) as pool: # this approach for pathos.multiprocessing
             #    self.bm_list = list(
-            #        pool.map(lambda ii: bppr(self.X, self.newy[ii, :], **kwargs), list(range(self.nRidge))))
+            #        pool.map(lambda ii: bppr(self.X, self.newy[ii, :], **kwargs), list(range(self.nbasis))))
             temp = PoolBPPR(self.X, self.newy, **kwargs)
-            self.bm_list = temp.fit(ncores, self.nRidge)
+            self.bm_list = temp.fit(ncores, self.nbasis)
         return
 
     def predict(self, X, mcmc_use=None, nugget=False, trunc_error=False, ncores=1):
@@ -781,13 +781,13 @@ class bpprBasis:
             multivariate/functional response.
         """
         if ncores == 1:
-            pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nRidge))))
+            pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
         else:
             #with Pool(ncores) as pool:
             #    pred_coefs = list(
-            #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nRidge))))
+            #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
             temp = PoolBPPRPredict(X, mcmc_use, nugget, self.bm_list)
-            pred_coefs = temp.predict(ncores, self.nRidge)
+            pred_coefs = temp.predict(ncores, self.nbasis)
         out = np.dot(np.dstack(pred_coefs), self.basis.T)
         out2 = out * self.y_sd + self.y_mean
         if trunc_error:
@@ -807,13 +807,13 @@ class bpprBasis:
         fig = plt.figure()
 
         ax = fig.add_subplot(2, 2, 1)
-        for i in range(self.nRidge):
+        for i in range(self.nbasis):
             plt.plot(self.bm_list[i].samples.nRidge)
         plt.ylabel("number of basis functions")
         plt.xlabel("MCMC iteration (post-burn)")
 
         ax = fig.add_subplot(2, 2, 2)
-        for i in range(self.nRidge):
+        for i in range(self.nbasis):
             plt.plot(self.bm_list[i].samples.sdResid)
         plt.ylabel("error variance")
         plt.xlabel("MCMC iteration (post-burn)")
@@ -951,7 +951,7 @@ def bpprPCA(X, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **
 
 if __name__ == '__main__':
 
-    if True:
+    if False:
         def f(x):
             out = 10.0 * np.sin(2*np.pi * x[:, 0] * x[:, 1]) + 20.0 * (x[:, 2] - 0.5) ** 2 + 10.0 * x[:, 3] + 5.0 * x[:, 4]
             return out
@@ -961,7 +961,7 @@ if __name__ == '__main__':
         p = 10
         x = np.random.rand(n, p)
         X = np.random.rand(1000, p)
-        y = f(x) + np.random.normal(size=n)
+        y = f(x) + np.random.normal(size=n)*1
 
         mod = bppr(x, y, nPost=10000, nBurn=9000)
         pred = mod.predict(X, mcmc_use = np.array([1, 100]), nugget = False)
