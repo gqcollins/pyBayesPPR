@@ -1,8 +1,9 @@
+
 In this example, we generate data from the Friedman function but treat one of the variables (the first) as a functional variable.
 
 
 ```python
-import pyBASS as pb
+import pyBayesPPR as pb
 import numpy as np
 import matplotlib.pyplot as plt
 ```
@@ -31,43 +32,37 @@ plt.show()
 ```
 
 
-    
 ![png](ex2_files/ex2_3_0.png)
-    
 
 
 Now take the principal component decomposition of y to see that most of the variation is captured with 3 principal components.
 
 
 ```python
-pca = pb.BassPCAsetup(y)
+pca = pb.bpprPCAsetup(y)
 pca.plot()
 ```
 
 
-    
 ![png](ex2_files/ex2_5_0.png)
-    
 
 
-Now fit a BASS model in PCA space.
+Now fit a BPPR model in PCA space.
 
 
 ```python
-mod2 = pb.bassPCA(x, y, npc=3, ncores=3)
+mod2 = pb.bpprPCA(x, y, npc=3, ncores=3)
 mod2.plot()
 ```
 
-    Starting bassPCA with 3 components, using 3 cores.
-    BASS MCMC Complete. Time: 3.399235 seconds.
-    BASS MCMC Complete. Time: 3.402881 seconds.
-    BASS MCMC Complete. Time: 3.504653 seconds.
+    Starting bpprPCA with 3 components, using 3 cores.
+    BPPR MCMC Complete. Time: 18.172760 seconds.
+    BPPR MCMC Complete. Time: 18.258344 seconds.
+    BPPR MCMC Complete. Time: 19.003537 seconds.
 
 
 
-    
 ![png](ex2_files/ex2_7_1.png)
-    
 
 
 Here are posterior mean predictions of our test data:
@@ -80,9 +75,7 @@ plt.show()
 ```
 
 
-    
 ![png](ex2_files/ex2_9_0.png)
-    
 
 
 Test data posterior mean vs noiseless observed:
@@ -94,9 +87,7 @@ plt.show()
 ```
 
 
-    
 ![png](ex2_files/ex2_11_0.png)
-    
 
 
 Functional residuals:
@@ -108,9 +99,7 @@ plt.show()
 ```
 
 
-    
 ![png](ex2_files/ex2_13_0.png)
-    
 
 
 Prediction uncertainty for one of the test samples:
@@ -124,7 +113,5 @@ plt.show()
 ```
 
 
-    
 ![png](ex2_files/ex2_15_0.png)
-    
 
