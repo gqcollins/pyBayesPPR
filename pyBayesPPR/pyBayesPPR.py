@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Author: Gavin Collins
+Authors: Gavin Collins and Devin Francom
 """
 
 import numpy as np
@@ -299,7 +299,7 @@ class bpprState:
             
             logMH = (cand.logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
                      logMHbdCand - self.logMHbd + # Probability of birth
-                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) - self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
+                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) - self.prior.dfSpline/2 * np.log(1 + self.varCoefs) + # likelihood
                      np.log(self.prior.nRidgeMean/(self.nRidge + 1))) # prior
 
             if np.log(np.random.rand()) < logMH:
@@ -354,7 +354,7 @@ class bpprState:
 
             logMH = (logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
                      logMHbdCand - self.logMHbd + # Probability of death
-                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) + self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
+                     -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) + self.prior.dfSpline/2 * np.log(1 + self.varCoefs) + # likelihood
                      np.log(self.nRidge/self.prior.nRidgeMean)) # prior
 
             if np.log(np.random.rand()) < logMH:
@@ -399,7 +399,7 @@ class bpprState:
 
                 self.basis = np.delete(self.basis, tokill_slice, 1)
 
-        else: # START HERE (try this step)
+        else:
             ## CHANGE step
 
             tochange_ind = np.random.choice(self.nRidge)
@@ -448,24 +448,27 @@ class bpprState:
                 self.knots[tochange_ind, :] = cand.knots
 
                 self.basis[:, tochange_slice] = cand.basis
-
+        
+        self.coefs = self.bhat * self.varCoefs / (1 + self.varCoefs) + np.dot(self.R_inv_t, np.random.normal(size=self.nBasis)) * np.sqrt(
+            self.sdResid * self.varCoefs / (1 + self.varCoefs))
+        
         shapeVarResid = self.data.n / 2
+                
         #scaleVarResid = (self.data.ssy - np.dot(self.bhat.T, self.Bty[0:self.nBasis]) / (1 + self.varCoefs)) / 2
         #if scaleVarResid < 0:
         #    scaleVarResid = 1.e-10
 
-        scaleVarResid = self.sse/2
+        # scaleVarResid = self.sse/2
+        
+        preds = np.dot(self.basis, self.coefs)
+        resid = self.data.y - preds
+        scaleVarResid = np.dot(resid, resid)/2
         self.sdResid = np.sqrt(1 / np.random.gamma(shapeVarResid, 1 / scaleVarResid, size=1))
 
-        self.coefs = self.bhat * self.varCoefs / (1 + self.varCoefs) + np.dot(self.R_inv_t, np.random.normal(size=self.nBasis)) * np.sqrt(
-            self.sdResid * self.varCoefs / (1 + self.varCoefs))
-
-        temp = np.dot(self.R, self.coefs)
-        qf2 = np.dot(temp, temp)
         shapeVarCoefs = self.prior.shapeVarCoefs + self.nBasis / 2
-        scaleVarCoefs = self.prior.scaleVarCoefs + qf2 / self.sdResid**2 / 2
+        scaleVarCoefs = self.prior.scaleVarCoefs + np.dot(preds, preds) / self.sdResid**2 / 2
         self.varCoefs = 1/np.random.gamma(shapeVarCoefs, 1 / scaleVarCoefs, size=1)
-
+        self.sse = self.data.ssy - self.varCoefs / (1 + self.varCoefs) * self.qf
 
 
 class bpprModel:
@@ -951,7 +954,7 @@ def bpprPCA(X, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **
 
 if __name__ == '__main__':
 
-    if False:
+    if True:
         def f(x):
             out = 10.0 * np.sin(2*np.pi * x[:, 0] * x[:, 1]) + 20.0 * (x[:, 2] - 0.5) ** 2 + 10.0 * x[:, 3] + 5.0 * x[:, 4]
             return out
@@ -970,7 +973,7 @@ if __name__ == '__main__':
 
         print(np.sqrt(np.var(mod.predict(X).mean(axis=0)-f(X))))
 
-    if True:
+    if False:
         def f2(x):
             out = 10. * np.sin(np.pi * tt * x[1]) + 20. * (x[2] - .5) ** 2 + 10 * x[3] + 5. * x[4]
             return out
