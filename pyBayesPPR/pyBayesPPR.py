@@ -96,16 +96,15 @@ def getQf(BtB, Bty):
 def getlogMHnActFeat(nAct, feat, wnAct_norm, wfeat_norm, p, nActMax):
     """Get (nAct,feat) term for RJMCMC MH acceptance ratio"""
     if nAct == 1:
-        out = (np.log(wnAct_norm[nAct - 1]) - np.log(2 * p)  # proposal
-               + np.log(2 * p) + np.log(nActMax))
+        out = (np.log(1/nActMax) # prior 
+               - np.log(wnAct_norm[0])) # proposal
                
     else:
         x = np.zeros(p)
         x[feat] = 1
-        lprob_feat = np.log(dwallenius(wfeat_norm, feat))
-        out = (np.log(wnAct_norm[nAct - 1]) + lprob_feat - nAct * np.log(2)  # proposal
-               + nAct * np.log(2) + np.log(comb(p, nAct)) + np.log(nActMax))  # prior
-    
+        out = (np.log(1/comb(p, nAct)) + np.log(1/nActMax)  # prior
+              - (np.log(wnAct_norm[nAct - 1]) + np.log(dwallenius(wfeat_norm, feat)))) # proposal
+               
     return out
 
 
@@ -352,7 +351,7 @@ class bpprState:
 
             logMHnActFeat = getlogMHnActFeat(self.nAct[tokill_ind], self.feat[tokill_ind, 0:self.nAct[tokill_ind]], wnAct_norm, wfeat_norm, self.data.p, self.prior.nActMax)
 
-            logMH = (logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
+            logMH = (-logMHnActFeat + # Adjustment for Adaptive Nott-Kuk-Duc Proposal
                      logMHbdCand - self.logMHbd + # Probability of death
                      -self.data.n/2 * (np.log(sseCand) - np.log(self.sse)) + self.prior.dfSpline/2 * np.log(self.varCoefs + 1) + # likelihood
                      np.log(self.nRidge/self.prior.nRidgeMean)) # prior
