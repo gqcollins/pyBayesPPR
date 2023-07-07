@@ -946,7 +946,7 @@ def bpprPCA(X, y, npc=None, percVar=99.9, ncores=1, center=True, scale=False, **
 
 if __name__ == '__main__':
 
-    if False:
+    if True:
         def f(x):
             out = 10.0 * np.sin(2*np.pi * x[:, 0] * x[:, 1]) + 20.0 * (x[:, 2] - 0.5) ** 2 + 10.0 * x[:, 3] + 5.0 * x[:, 4]
             return out
@@ -959,13 +959,13 @@ if __name__ == '__main__':
         y = f(x) + np.random.normal(size=n)*1
 
         mod = bppr(x, y, nPost=10000, nBurn=9000)
-        pred = mod.predict(X, mcmc_use = np.array([1, 100]), nugget = False)
+        pred = mod.predict(X, nugget = False)
 
         mod.plot()
 
         print(np.sqrt(np.var(mod.predict(X).mean(axis=0)-f(X))))
 
-    if True:
+    if False:
         def f2(x):
             out = 10. * np.sin(np.pi * tt * x[1]) + 20. * (x[2] - .5) ** 2 + 10 * x[3] + 5. * x[4]
             return out
