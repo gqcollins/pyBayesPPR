@@ -1,0 +1,32 @@
+[project]
+name = "pyBayesPPR"
+version = "0.1"
+description = "Bayesian Projection Pursuit Regression"
+authors = [
+    {name = "Gavin Collins", email = "gqcolli@sandia.gov"},
+    {name = "Devin Francom", email = "dfrancom@lanl.gov"}
+]
+license = {text = "BSD 3-Clause"}
+readme = "README.md"
+requires-python = ">=3.6"
+
+keywords = ["emulator"]
+
+dependencies=[
+        "numpy",
+        "matplotlib",
+        "scipy",
+]
+
+classifiers = [
+    'License :: OSI Approved :: BSD License',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python',
+    'Topic :: Scientific/Engineering',
+    'Topic :: Scientific/Engineering :: Mathematics',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.6',
+]
+
+[project.urls]
+repository = "http://www.github.com/gqcollins/BayesPPR"

@@ -6,7 +6,6 @@ Author: Gavin Collins and Devin Francom
 
 import numpy as np
 import scipy as sp
-from scipy import stats
 import matplotlib.pyplot as plt
 from itertools import combinations, chain
 from scipy.special import comb
