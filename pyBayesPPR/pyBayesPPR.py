@@ -457,7 +457,7 @@ class bpprState:
         temp = np.dot(self.R, self.coefs)
         qf2 = np.dot(temp, temp)
         shapeVarCoefs = self.prior.shapeVarCoefs + self.nBasis / 2
-        scaleVarCoefs = self.prior.scaleVarCoefs + qf2 / self.sdResid**2 / 2
+        scaleVarCoefs = self.prior.scaleVarCoefs + qf2 /(2*self.sdResid**2)
         self.varCoefs = 1/np.random.gamma(shapeVarCoefs, 1 / scaleVarCoefs, size=1)
 
 
