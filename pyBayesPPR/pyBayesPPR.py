@@ -604,9 +604,9 @@ def bppr(X, y, nPost = 10000, nBurn = 9000, keepEvery = 1, nRidgeMean = 10, nAct
     """
     **Bayesian Projection Pursuit Regression - model fitting**
 
-    This function takes training data, priors, and algorithmic constants and fits a BayesPPR model.  The result is a set of
-    posterior samples of the model.  The resulting object has a predict function to generate posterior predictive
-    samples.  Default settings of priors and algorithmic parameters should only be changed by users who understand
+    This function takes training data, priors, and algorithmic constants and fits a BayesPPR model. The result is a set of
+    posterior samples of the model. The resulting object has a predict function to generate posterior predictive
+    samples. Default settings of priors and algorithmic parameters should only be changed by users who understand
     the model.
 
     :param X: matrix (numpy array) of predictors of dimension nxp, where n is the number of training examples and p is
@@ -615,18 +615,20 @@ def bppr(X, y, nPost = 10000, nBurn = 9000, keepEvery = 1, nRidgeMean = 10, nAct
     :param nPost: total number of MCMC iterations (integer)
     :param nBurn: number of MCMC iterations to throw away as burn-in (integer, less than nPost).
     :param keepEvery: thin MCMC iterations and keep only every keepEvery (integer).
-    :param nRidgeMean: prior mean number of ridge functions.
+    :param nRidgeMean: prior mean number of ridge functions (float, greater than 0).
     :param nActMax: maximum numer of nonzero elements in each projection direction (integer, less than p)
-    :param dfSpline: degrees of freedom for spline basis
-    :param probRelu: prior probability that any given ridge function uses a relu transformation.
-    :param wnAct: nominal weight for degree of interaction, used in generating candidate basis functions. Should be greater
-        than 0.
-    :param wfeat: nominal weight for features, used in generating candidate basis functions. Should be greater than 0.
-    :param shapeVarCoefs: shape for inverse gamma prior on the variance of the coefficients.
-    :param scaleVarCoefs: scale for inverse gamma prior on the variance of the coefficients.
-    :param minNonzero: minimum number of non-zero points in a basis function. Defaults to 20 or 0.1 times the
-        number of observations, whichever is smaller.
-    :param scaleProjDirProp: scale parameter for generating proposed projection directions. Should be in (0, 1); default is about 0.002.
+    :param dfSpline: degrees of freedom for spline basis (integer, greater than 0)
+    :param probRelu: prior probability that any given ridge function uses a relu transformation (float in (0, 1))
+    :param wnAct: nominal weights for degree of interaction, used in generating candidate basis functions
+        (numpy array of length nActMAx; all elements should be greater than 0).
+    :param wfeat: nominal weight for features, used in generating candidate basis functions. (numpy array
+        of length p; all elements should be greater than 0).
+    :param shapeVarCoefs: shape for inverse gamma prior on the variance of the coefficients (float, greater than 0).
+    :param scaleVarCoefs: scale for inverse gamma prior on the variance of the coefficients (float, greater than 0).
+    :param minNonzero: minimum number of non-zero values in a basis function (integer between 0 and n). Defaults to
+        20 or 0.1*n, whichever is smaller.
+    :param scaleProjDirProp: scale parameter for generating proposed projection directions. Should be in (0, 1);
+        default is about 0.002.
     :param nRidgeMax: maximum number of ridge functions (integer)
     :param verbose: boolean for printing progress
     :return: an object of class bpprModel, which includes predict and plot functions.
