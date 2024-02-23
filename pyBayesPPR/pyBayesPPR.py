@@ -397,7 +397,7 @@ class bpprState:
 
                 self.basis = np.delete(self.basis, tokill_slice, 1)
 
-        else: # START HERE (try this step)
+        else: 
             ## CHANGE step
 
             tochange_ind = np.random.choice(self.nRidge)
@@ -495,7 +495,7 @@ class bpprModel:
         self.samples.nRidge[self.k] = self.state.nRidge
 
         if self.state.cmod: # basis part of state was changed
-            self.k_mod = self.k_mod + 1
+            self.k_mod += 1
             self.samples.nRidge_models[self.k_mod] = self.state.nRidge
             self.samples.nBasis_models[self.k_mod] = self.state.nBasis
             self.samples.nAct[self.k_mod, 0:self.state.nRidge] = self.state.nAct[0:self.state.nRidge]
@@ -505,7 +505,7 @@ class bpprModel:
             self.state.cmod = False
 
         self.model_lookup[self.k] = self.k_mod
-        self.k = self.k + 1
+        self.k += 1
 
     def plot(self):
         """
@@ -565,7 +565,7 @@ class bpprModel:
             stop = stop + self.prior.dfSpline
         return mat
 
-    def predict(self, X, mcmc_use=None, nugget=False):
+    def predict(self, newdata, mcmc_use=None, nugget=False):
         """
         BPPR prediction using new inputs (after training).
 
@@ -577,11 +577,11 @@ class bpprModel:
         :return: a matrix (numpy array) of predictions with dimension mxn, with rows corresponding to MCMC samples and
             columns corresponding to prediction points.
         """
-        if len(X.shape)==1:
-            X = X[None, :]
+        if np.ndim(newdata)==1:
+            newdata = newdata[None, :]
 
-        Xs = normalize(X, self.data.Xmn, self.data.Xsd)
-        if np.any(mcmc_use == None):
+        Xs = normalize(newdata, self.data.Xmn, self.data.Xsd)
+        if mcmc_use is None:
             mcmc_use = np.array(range(self.nstore))
         out = np.zeros([len(mcmc_use), len(Xs)])
         models = self.model_lookup[mcmc_use]
@@ -590,9 +590,9 @@ class bpprModel:
         for j in umodels:
             mcmc_use_j = mcmc_use[np.ix_(models == j)]
             nn = len(mcmc_use_j)
-            out[range(k, nn + k), :] = np.dot(self.samples.coefs[mcmc_use_j, 0:self.samples.nBasis_models[j]],
+            out[range(k, nn + k), :] = np.dot(self.samples.coefs[mcmc_use_j, :self.samples.nBasis_models[j]],
                                               self.makeAllBasis(j, Xs).T)
-            k = k + nn
+            k += nn
         if nugget:
             out = out + np.random.normal(size=[len(Xs), len(mcmc_use)], scale=self.samples.sdResid[mcmc_use]).T
         return out
@@ -761,7 +761,7 @@ class bpprBasis:
             self.bm_list = temp.fit(ncores, self.nbasis)
         return
 
-    def predict(self, X, mcmc_use=None, nugget=False, trunc_error=False, ncores=1):
+    def predict(self, newdata, mcmc_use=None, nugget=False, trunc_error=False, ncores=1):
         """
         Predict the functional response at new inputs.
 
@@ -777,12 +777,12 @@ class bpprBasis:
             multivariate/functional response.
         """
         if ncores == 1:
-            pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
+            pred_coefs = list(map(lambda ii: self.bm_list[ii].predict(newdata, mcmc_use, nugget), list(range(self.nbasis))))
         else:
             #with Pool(ncores) as pool:
             #    pred_coefs = list(
             #        pool.map(lambda ii: self.bm_list[ii].predict(X, mcmc_use, nugget), list(range(self.nbasis))))
-            temp = PoolBPPRPredict(X, mcmc_use, nugget, self.bm_list)
+            temp = PoolBPPRPredict(newdata, mcmc_use, nugget, self.bm_list)
             pred_coefs = temp.predict(ncores, self.nbasis)
         out = np.dot(np.dstack(pred_coefs), self.basis.T)
         out2 = out * self.y_sd + self.y_mean
