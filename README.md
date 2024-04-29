@@ -9,10 +9,6 @@ Use
 pip install git+https://github.com/gqcollins/pyBayesPPR.git
 ```
 
-## Examples
-* [Example 1](examples/ex1.md) - univariate response
-* [Example 2](examples/ex2.md) - multivariate/functional response
-
 
 ************
 
