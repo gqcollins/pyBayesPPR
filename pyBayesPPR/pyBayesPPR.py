@@ -482,7 +482,7 @@ class bpprState:
         self.knots = np.zeros([prior.n_ridge_max, prior.df_spline + 2]) # Location of knots for nsplines
         self.coefs = np.zeros([prior.df_spline * prior.n_ridge_max + 1]) # Basis coefficients
         self.coefs[0] = np.mean(data.y)
-        self.sd_resid = 1.0 # Error standard deviation
+        self.s2 = 1.0 # Error variance
         if prior.prior_coefs == 'zs':
             self.var_coefs = prior.scale_var_coefs / prior.shape_var_coefs
             self.c_var_coefs = self.var_coefs / (self.var_coefs + 1.0)
@@ -614,12 +614,12 @@ class bpprState:
         return
     
     def sampleSDResid(self, data):
-        self.sd_resid = np.sqrt(1/np.random.gamma(data.n/2, 2/self.sse))
+        self.s2 = 1/np.random.gamma(data.n/2, 2/self.sse)
         return
     
     def sampleCoefs(self):
         self.coefs[:self.n_basis_total] = (self.c_var_coefs * self.qf_info.ls_est +
-                                          np.sqrt(self.c_var_coefs) * self.sd_resid * self.qf_info.inv_chol @ np.random.normal(size = self.n_basis_total)
+                                          np.sqrt(self.c_var_coefs * self.s2) * self.qf_info.inv_chol @ np.random.normal(size = self.n_basis_total)
                                           )
         return
     
@@ -628,7 +628,7 @@ class bpprState:
         qf = qf_comp.T @ qf_comp
         
         self.var_coefs = 1/np.random.gamma(prior.shape_var_coefs + self.n_basis_total/2,
-                                           1 / (prior.scale_var_coefs + qf/(2*self.sd_resid**2))
+                                           1 / (prior.scale_var_coefs + qf/(2*self.s2))
                                            )
         self.c_var_coefs = self.var_coefs / (self.var_coefs + 1)
         self.sse = data.ssy - self.c_var_coefs * self.qf_info.qf
@@ -695,7 +695,7 @@ class bpprSamples:
         self.proj_dir = np.zeros([specs.n_keep, prior.n_ridge_max, prior.n_act_max])  # Ridge directions
         self.knots = np.zeros([specs.n_keep, prior.n_ridge_max, prior.df_spline + 2]) # Location of knots for nsplines
         self.coefs = np.zeros([specs.n_keep, prior.df_spline * prior.n_ridge_max + 1]) # Basis coefficients
-        self.sd_resid = np.zeros(specs.n_keep) # Error standard deviation
+        self.s2 = np.zeros(specs.n_keep) # Error variance
         if prior.prior_coefs == 'zs':
             self.var_coefs = np.zeros(specs.n_keep)
         elif prior.prior_coefs == 'flat':
@@ -713,7 +713,7 @@ class bpprSamples:
         self.proj_dir[state.idx] = state.proj_dir.copy()
         self.knots[state.idx] = state.knots.copy()
         self.coefs[state.idx] = state.coefs.copy()
-        self.sd_resid[state.idx] = state.sd_resid
+        self.s2[state.idx] = state.s2
         if state.var_coefs is not None:
             self.var_coefs[state.idx] = state.var_coefs
         return
@@ -729,52 +729,52 @@ class bpprModel:
         self.samples = samples
         return
 
-    def predict(self, newdata, idx_use=None):
+    def predict(self, newdata, mcmc_use=None):
         n, p = np.shape(newdata)
 
         newdata_s = self.data.standardize(newdata)
         
-        if idx_use is None:
-            idx_use = np.array(range(self.specs.n_keep))
+        if mcmc_use is None:
+            mcmc_use = np.array(range(self.specs.n_keep))
         else:
-            assert max(idx_use) <= self.specs.n_keep, "invalid 'idx_use'"
-        n_use = len(idx_use)
+            assert max(mcmc_use) <= self.specs.n_keep, "invalid 'mcmc_use'"
+        n_use = len(mcmc_use)
         
         ridge_basis = [None] * np.max(self.samples.n_ridge) 
         preds = np.zeros((n_use, n))
         for i in range(n_use):
-            preds[i] = self.samples.coefs[idx_use[i], 0]
-            calc_all_bases = (i == 0) or (self.samples.n_ridge[idx_use[i]] != self.samples.n_ridge[idx_use[i-1]])
-            if self.samples.n_ridge[idx_use[i]] > 0:
+            preds[i] = self.samples.coefs[mcmc_use[i], 0]
+            calc_all_bases = (i == 0) or (self.samples.n_ridge[mcmc_use[i]] != self.samples.n_ridge[mcmc_use[i-1]])
+            if self.samples.n_ridge[mcmc_use[i]] > 0:
                 basis_idx = slice(0, 1)
-                for j in range(self.samples.n_ridge[idx_use[i]]):
-                    if self.samples.ridge_type[idx_use[i]][j] == "cont":
+                for j in range(self.samples.n_ridge[mcmc_use[i]]):
+                    if self.samples.ridge_type[mcmc_use[i]][j] == "cont":
                         basis_idx = slice(basis_idx.stop, basis_idx.stop + self.prior.df_spline)
-                        n_act = self.samples.n_act[idx_use[i]][j]
-                        knots = self.samples.knots[idx_use[i]][j].copy()
+                        n_act = self.samples.n_act[mcmc_use[i]][j]
+                        knots = self.samples.knots[mcmc_use[i]][j].copy()
                         if (calc_all_bases or
-                            n_act != self.samples.n_act[idx_use[i-1]][j] or
-                            knots[0] != self.samples.knots[idx_use[i-1]][j][0]):
-                                feat = self.samples.feat[idx_use[i]][j][:n_act].copy()
-                                proj_dir = self.samples.proj_dir[idx_use[i]][j][:n_act].copy()
+                            n_act != self.samples.n_act[mcmc_use[i-1]][j] or
+                            knots[0] != self.samples.knots[mcmc_use[i-1]][j][0]):
+                                feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
+                                proj_dir = self.samples.proj_dir[mcmc_use[i]][j][:n_act].copy()
                                 proj = newdata_s[:, feat] @ proj_dir
                                 ridge_basis[j] = get_mns_basis(proj, knots) # Get basis function
                     else: # No continuous features in this basis
                         basis_idx = slice(basis_idx.stop, basis_idx.stop + 1)
-                        n_act = self.samples.n_act[idx_use[i]][j]
+                        n_act = self.samples.n_act[mcmc_use[i]][j]
                         if self.samples.ridge_type[j] == "cat": # all categorical features in this basis
                             if calc_all_bases:
-                                feat = self.samples.feat[idx_use[i]][j][:n_act].copy()
+                                feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
                                 ridge_basis[j] = get_cat_basis(newdata_s[:, feat])
                         else:  # some discrete quantitative features in this basis
-                            proj_dir = self.samples.proj_dir[idx_use[i]][j][:n_act].copy()
+                            proj_dir = self.samples.proj_dir[mcmc_use[i]][j][:n_act].copy()
                             if (calc_all_bases or
-                                n_act != self.samples.n_act[idx_use[i-1]][j] or
-                                np.any(proj_dir != self.samples.proj_dir[idx_use[i-1]][j][:n_act])):
-                                    feat = self.samples.feat[idx_use[i]][j][:n_act].copy()
+                                n_act != self.samples.n_act[mcmc_use[i-1]][j] or
+                                np.any(proj_dir != self.samples.proj_dir[mcmc_use[i-1]][j][:n_act])):
+                                    feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
                                     ridge_basis[j] = newdata_s[:, feat] @ proj_dir
                     # Add predictions for jth basis function
-                    preds[i] += ridge_basis[j] @ self.samples.coefs[idx_use[i], basis_idx]
+                    preds[i] += ridge_basis[j] @ self.samples.coefs[mcmc_use[i], basis_idx]
 
         return preds
 
