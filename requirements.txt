@@ -1,5 +1,2 @@
 numpy
 scipy
-itertools
-time
-warnings
