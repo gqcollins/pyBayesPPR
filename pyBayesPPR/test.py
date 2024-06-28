@@ -19,6 +19,7 @@ y = np.random.normal(f(X), 1)  # response (training set) with noise.
 # fit BayesPPR model with RJMCMC
 mod = bppr(X, y)
 mod.plot()
+mod.traceplot()
 
 # predict at new inputs (Xnew)
 X_test = np.random.rand(1000, p)
