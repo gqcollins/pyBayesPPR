@@ -30,6 +30,117 @@ def get_move_type(n_ridge, n_quant, n_ridge_max):
         move_type = np.random.choice(['birth', 'death', 'change'])
     return move_type
 
+def autocorrelation(chain, lag):
+    """
+    Calculate the autocorrelation of the chain at a specific lag.
+    
+    Parameters:
+    - chain: 1D numpy array of numerical values.
+    - lag: Integer specifying the lag at which to calculate autocorrelation.
+    
+    Returns:
+    - autocorr: Autocorrelation value at the specified lag.
+    """
+    n = len(chain)
+    mean = np.mean(chain)
+    var = np.var(chain)
+    
+    # Ensure lag is non-negative and less than the length of the chain
+    if lag < 0 or lag >= n:
+        raise ValueError("Lag must be non-negative and less than the length of the chain.")
+    
+    # Calculate covariance
+    cov = np.mean((chain[:n-lag] - mean) * (chain[lag:] - mean))
+    
+    # Normalize by variance, handling the case where variance is zero
+    autocorr = cov / var if var > 0 else 0
+    return autocorr
+
+def effective_sample_size(chain):
+    """
+    Calculate the Effective Sample Size (ESS) for a given set of samples using numpy, with "chain" as the variable name.
+    
+    Parameters:
+    - chain: Iterable of numerical values representing the samples.
+    
+    Returns:
+    - ess: Effective Sample Size.
+    """
+    n = len(chain)
+    if n < 2:
+        return n
+    
+    # Check if variance is zero
+    if np.var(chain) == 0:
+        return 1  # Return ESS as 1 if there's no variability in the chain
+    
+    # Calculate autocorrelation for different lags
+    max_lag = min(100, n // 2)  # Limiting the number of lags to check
+    autocorrs = [autocorrelation(chain, lag) for lag in range(1, max_lag + 1)]
+    
+    # Sum the autocorrelations until they become non-positive
+    sum_autocorrs = 0
+    for autocorr in autocorrs:
+        if autocorr <= 0:
+            break
+        sum_autocorrs += autocorr
+    
+    ess = n / (1 + 2 * sum_autocorrs)
+    return ess
+
+def split_chain_into_subchains(chain, n_subchains):
+    """
+    Split a single chain into multiple subchains.
+    
+    Parameters:
+    - chain: A 1D numpy array or list representing the chain.
+    - n_subchains: The number of subchains to split the chain into.
+    
+    Returns:
+    - A 2D numpy array where each sub-array represents a subchain.
+    """
+    chain = np.array(chain)
+    n_samples = len(chain)
+    
+    # Calculate the number of samples per subchain
+    samples_per_subchain = n_samples // n_subchains
+    
+    # Trim the chain if necessary to make it evenly divisible
+    trimmed_chain = chain[:samples_per_subchain * n_subchains]
+    
+    # Split the chain into subchains
+    subchains = np.array_split(trimmed_chain, n_subchains)
+    
+    return np.array(subchains)
+
+def calculate_rhat(chains):
+    """
+    Calculate the potential scale reduction factor, R-hat, for MCMC chains.
+    
+    Parameters:
+    - chains: A 2D numpy array or list of lists where each sub-array/list represents a chain.
+    
+    Returns:
+    - R-hat statistic for the chains.
+    """
+    chains = np.array(chains)  # Ensure chains is a numpy array for easier manipulation
+    num_chains, num_samples = chains.shape
+    
+    # Step 1: Calculate the within-chain variance
+    W = np.mean(np.var(chains, axis=1, ddof=1))
+    
+    # Step 2: Calculate the between-chain variance
+    chain_means = np.mean(chains, axis=1)
+    B = np.var(chain_means, ddof=1) * num_samples
+    
+    # Step 3: Estimate the marginal posterior variance
+    V_hat = ((num_samples - 1) / num_samples) * W + (1 / num_samples) * B
+    
+    # Step 4: Calculate R-hat
+    R_hat = np.sqrt(V_hat / W)
+    
+    return R_hat
+
 def lchoose(n, k):
     return -betaln(1 + n - k, 1 + k) - np.log(n + 1)
         
@@ -923,7 +1034,13 @@ class bpprModel:
                     color = darkgrey, label = 'Mean')
         plt.xlabel('MCMC Iteration')
         plt.ylabel('Number of Ridge Functions')
-        plt.title('n_ridge')
+        ess = effective_sample_size(self.samples.n_ridge)
+        subchains = split_chain_into_subchains(self.samples.n_ridge, 4)
+        if (np.var(subchains, axis=1) > 0).all():
+            rhat = calculate_rhat(subchains)
+            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
+        else:
+            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\hat{{R}}$ = NA')
         plt.legend()
         
         # Residual Variance
@@ -937,11 +1054,17 @@ class bpprModel:
                     color = darkgrey, label = 'Mean')
         plt.xlabel('MCMC Iteration')
         plt.ylabel('Residual Variance')
-        plt.title('s2')
+        ess = effective_sample_size(self.samples.s2)
+        subchains = split_chain_into_subchains(self.samples.s2, 4)
+        rhat = calculate_rhat(subchains)
+        plt.title(f's2: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
         plt.legend()
                 
         # Coefficient Variance
         fig.add_subplot(2, 2, 3)
+        ess = effective_sample_size(self.samples.var_coefs)
+        subchains = split_chain_into_subchains(self.samples.var_coefs, 4)
+        rhat = calculate_rhat(subchains)
         plt.plot(
             self.samples.var_coefs,
             color=lightblue,
@@ -951,7 +1074,10 @@ class bpprModel:
                     color = darkgrey, label = 'Mean')
         plt.xlabel('MCMC Iteration')
         plt.ylabel('Variance of Basis Coefficients')
-        plt.title('var_coefs')
+        ess = effective_sample_size(self.samples.var_coefs)
+        subchains = split_chain_into_subchains(self.samples.var_coefs, 4)
+        rhat = calculate_rhat(subchains)
+        plt.title(f'var_coefs: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
         plt.legend()
         
         fig.tight_layout()
