@@ -5,9 +5,11 @@ Author: Gavin Collins
 import numpy as np
 import scipy as sp
 from scipy.special import comb, betaln
+from scipy import stats
 from itertools import combinations, chain
 import time
 from warnings import warn
+import matplotlib.pyplot as plt
     
 
 def print_update(it, n_draws, phase, current_time, start_time, n_ridge):
@@ -777,6 +779,191 @@ class bpprModel:
                     preds[i] += ridge_basis[j] @ self.samples.coefs[mcmc_use[i], basis_idx]
 
         return preds
+    
+    def plot(self, X_test=None, y_test=None, n_plot=None, file=None):
+        # Get X and y
+        if (X_test is None and y_test is not None) or (X_test is not None and y_test is None):
+            raise ValueError("Both X_test and y_test should be specified or left as None.")
+        
+        if X_test is None:
+            X = self.data.X.copy()
+        else:
+            X = X_test.copy()
+            
+        if y_test is None:
+            y = self.data.y.copy()
+        else:
+            y = y_test.copy()
+            
+        n = len(y)
+        if n_plot is None:
+            n_plot = min(n, 1000)
+        elif n_plot > n:
+            n_plot = n
+        
+        if n_plot < n:
+            idx_plot = np.random.choice(n, n_plot, replace=False)
+        else:
+            idx_plot = np.arange(n)
+        
+        # Get predictions
+        mn_samples = self.predict(X)
+        post_mn = np.mean(mn_samples, axis=0)
+        resid = y - post_mn
+        bias = np.mean(resid)
+        rmse = np.std(resid)
+        R_squared = 1 - rmse**2 / np.var(y)
+        
+        sd_samples = np.repeat(np.sqrt(self.samples.s2), n).reshape(mn_samples.shape)
+        y_samples = np.random.normal(mn_samples, sd_samples)
+        post_lower = np.quantile(y_samples, 0.025, axis=0)
+        post_upper = np.quantile(y_samples, 0.975, axis=0)   
+        coverage = np.mean(np.logical_and(
+            y >= post_lower,
+            y <= post_upper
+            ))
+        
+        # make plots
+        fig = plt.figure(figsize=(8, 6), dpi=100.0)
+        lightblue = (0.55, 0.65, 0.8)
+        darkgrey = (0.15, 0.15, 0.15)
+        red = 'firebrick'
+        
+        # Predicted v. actual
+        fig.add_subplot(2, 2, 1)
+        plt.scatter(
+            y[idx_plot], post_mn[idx_plot],
+            color=lightblue,
+            s=15,
+            alpha=0.5
+            )
+        plt.plot((min(y), max(y)), (min(post_mn), max(post_mn)),
+                 color = red)
+        plt.xlabel('Actual Response')
+        plt.ylabel('Predicted Response')
+        plt.title(f'Accuracy: RMSE = {rmse:.{3}g}, $R^2 = ${R_squared:.{3}f}')
+        
+        # Prediction Intervals
+        fig.add_subplot(2, 2, 2)
+        idx_sort = np.argsort(post_mn[idx_plot])
+        plt.errorbar(list(range(n_plot)), post_mn[idx_plot][idx_sort],
+                     [post_mn[idx_plot][idx_sort] - post_lower[idx_plot][idx_sort],
+                      post_upper[idx_plot][idx_sort] - post_mn[idx_plot][idx_sort]],
+                     fmt='none', color=lightblue,
+                     label="Uncertainty Bound",
+                     zorder=1)
+        plt.scatter(list(range(n_plot)), y[idx_plot][idx_sort],
+                    s=5, color=red,
+                    label = 'Actual Response', zorder=2, alpha=0.5)
+        plt.plot(list(range(n_plot)), post_mn[idx_plot][idx_sort],
+                    color='navy', label = 'Predicted Response', zorder=3)
+        plt.xlabel('Index')
+        plt.ylabel('Response')
+        plt.title(f'95% Intervals: Coverage = {100*coverage:.{1}f}%')
+        plt.legend()
+                
+        # Residuals v. Predicted
+        fig.add_subplot(2, 2, 3)
+        plt.scatter(
+            post_mn[idx_plot], resid[idx_plot],
+            color=lightblue,
+            s=15,
+            alpha=0.5
+            )
+        plt.axhline(y = 0, color = red)
+        plt.xlabel('Predicted Response')
+        plt.ylabel('Actual - Predicted Response')
+        plt.title('Equal Variance and Lack of Trend')
+        
+        # Histogram of Residuals
+        fig.add_subplot(2, 2, 4)
+        xx = np.linspace(min(resid), max(resid), 100)
+        norm_pdf_xx = stats.norm.pdf(xx, bias, rmse)
+        plt.hist(
+            resid,
+            color = lightblue,
+            edgecolor=darkgrey,
+            density=True,
+            bins=25,
+            alpha=0.85
+            )
+        plt.plot(xx, norm_pdf_xx,
+                 linewidth=2,
+                 color=red
+                 )
+        plt.xlabel('Residuals')
+        plt.ylabel('Density')
+        plt.title('Normality')
+        
+        fig.tight_layout()
+
+        if file is not None:
+            plt.savefig(file)
+        else:
+            plt.show()
+
+        plt.close(fig)
+        
+        return
+    
+    def traceplot(self, file=None):
+        # make plots
+        fig = plt.figure(figsize=(8, 6), dpi=100.0)
+        lightblue = (0.55, 0.65, 0.8)
+        darkgrey = (0.15, 0.15, 0.15)
+        
+        # Number of ridge functions
+        fig.add_subplot(2, 2, 1)
+        plt.plot(
+            self.samples.n_ridge,
+            color=lightblue,
+            label = 'Samples'
+            )
+        plt.axhline(y = np.mean(self.samples.n_ridge),
+                    color = darkgrey, label = 'Mean')
+        plt.xlabel('MCMC Iteration')
+        plt.ylabel('Number of Ridge Functions')
+        plt.title('n_ridge')
+        plt.legend()
+        
+        # Residual Variance
+        fig.add_subplot(2, 2, 2)
+        plt.plot(
+            self.samples.s2,
+            color=lightblue,
+            label = 'Samples'
+            )
+        plt.axhline(y = np.mean(self.samples.s2),
+                    color = darkgrey, label = 'Mean')
+        plt.xlabel('MCMC Iteration')
+        plt.ylabel('Residual Variance')
+        plt.title('s2')
+        plt.legend()
+                
+        # Coefficient Variance
+        fig.add_subplot(2, 2, 3)
+        plt.plot(
+            self.samples.var_coefs,
+            color=lightblue,
+            label = 'Samples'
+            )
+        plt.axhline(y = np.mean(self.samples.var_coefs),
+                    color = darkgrey, label = 'Mean')
+        plt.xlabel('MCMC Iteration')
+        plt.ylabel('Variance of Basis Coefficients')
+        plt.title('var_coefs')
+        plt.legend()
+        
+        fig.tight_layout()
+
+        if file is not None:
+            plt.savefig(file)
+        else:
+            plt.show()
+
+        plt.close(fig)
+        
+        return
 
 
 def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
