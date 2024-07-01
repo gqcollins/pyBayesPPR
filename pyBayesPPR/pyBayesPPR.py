@@ -11,10 +11,6 @@ import time
 from warnings import warn
 import matplotlib.pyplot as plt
     
-
-def print_update(it, n_draws, phase, current_time, start_time, n_ridge):
-    print('MCMC iteration ' + str(it) + '/' + str(n_draws) + ' (' + phase + ') -- ' + str(round(current_time - start_time)) + ' secs -- n_ridge: ' + str(n_ridge) + '\n')
-
 def get_move_type(n_ridge, n_quant, n_ridge_max):
     if n_ridge == 0:
       move_type = 'birth'
@@ -891,6 +887,116 @@ class bpprModel:
 
         return preds
     
+    def sobol(self, mcmc_use="last", n_mc=2**12):
+        if mcmc_use == "last":
+            mcmc_use = [self.specs.n_keep - 1]
+        elif mcmc_use == "all":
+            mcmc_use = list(range(self.specs.n_keep))
+        elif type(mcmc_use) is np.ndarray:
+            mcmc_use = list(mcmc_use.astype(int))
+        elif type(mcmc_use) is int:
+            mcmc_use = [mcmc_use]
+
+        # Generate random samples of parameters according to Saltelli (2010) method.
+        qrng = stats.qmc.Sobol(d=2 * self.data.p, scramble=True)
+        base_sequence = qrng.random(n_mc)
+        saltelli_sequence = np.zeros([(self.data.p + 2) * n_mc, self.data.p])
+
+        idx = 0
+        for i in range(n_mc):
+            # Copy matrix "A"
+            for j in range(self.data.p):
+                saltelli_sequence[idx, j] = base_sequence[i, j]
+            idx += 1
+
+            # Cross-sample elements of "B" into "A"
+            for k in range(self.data.p):
+                for j in range(self.data.p):
+                    if (j == k):
+                        saltelli_sequence[idx, j] = base_sequence[i, j + self.data.p]
+                    else:
+                        saltelli_sequence[idx, j] = base_sequence[i, j]
+                idx += 1
+
+            # Copy matrix "B"
+            for j in range(self.data.p):
+                saltelli_sequence[idx, j] = base_sequence[i, j + self.data.p]
+            idx += 1
+
+        xmin = np.min(self.data.X, axis=0)
+        xrange = np.max(self.data.X, axis=0) - xmin
+        saltelli_sequence *= xrange
+        saltelli_sequence += xmin
+        NY = saltelli_sequence.shape[0]
+
+        # Evaluate model at those param values
+        mod_at_all_params = self.predict(saltelli_sequence, 
+                                         mcmc_use=np.array(mcmc_use))
+        del saltelli_sequence
+    
+        step = 2 + self.data.p
+        mod_at_A = mod_at_all_params[:, 0:NY:step].copy()
+        mod_at_B = mod_at_all_params[:, (step-1):NY:step].copy()
+        mod_at_AB = [
+            mod_at_all_params[:, (j + 1):NY:step].copy()
+            for j in range(self.data.p)
+        ]
+
+        del mod_at_all_params
+
+        first_order = np.zeros((len(mcmc_use), self.data.p))
+        total_order = np.zeros((len(mcmc_use), self.data.p))
+        
+        for j in range(self.data.p):
+            first_order[:, j] = np.mean(
+                mod_at_B * (mod_at_AB[j] - mod_at_A), axis=1
+            )
+
+            total_order[:, j] = 0.5 * np.mean(
+                (mod_at_A - mod_at_AB[j]) ** 2, axis=1
+            )
+
+        # Get all mcmc samples
+        self.first_order_sobol = first_order
+        self.total_order_sobol = total_order
+
+        return
+    
+    def plot_sobol(self, labels=None):
+        if labels is None:
+            labels = ['Var' + str(j+1) for j in range(self.data.p)]
+        
+        # Creating the bar plot
+        plt.figure(figsize=(10, 6))
+        first_order = np.mean(self.first_order_sobol, axis=0)
+        plt.bar(labels, first_order, color='skyblue')
+        
+        # Adding labels and title
+        plt.xlabel('Input Variable')
+        plt.ylabel("Sobol' Index")
+        plt.title("First-Order Sobol' Indices")
+        
+        normalized_indices = [index / max_index for index in sobol_indices]
+        
+        # Creating the bar plot
+        fig, ax1 = plt.subplots(figsize=(10, 6))
+        
+        color = 'tab:blue'
+        ax1.set_xlabel('Input Variable')
+        ax1.set_ylabel("Sobol' Index", color=color)
+        ax1.bar(input_variables, sobol_indices, color=color)
+        ax1.tick_params(axis='y', labelcolor=color)
+
+        # Instantiate a second axes that shares the same x-axis
+        ax2 = ax1.twinx()  
+        color = 'tab:red'
+        ax2.set_ylabel('Normalized Index', color=color)  # we already handled the x-label with ax1
+        ax2.plot(input_variables, normalized_indices, color=color, marker='o', linestyle='None')
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        # Display the plot
+        plt.show()
+    
     def plot(self, X_test=None, y_test=None, n_plot=None, file=None):
         # Get X and y
         if (X_test is None and y_test is not None) or (X_test is not None and y_test is None):
@@ -909,6 +1015,8 @@ class bpprModel:
         n = len(y)
         if n_plot is None:
             n_plot = min(n, 1000)
+        elif n_plot == 'all':
+            n_plot = n
         elif n_plot > n:
             n_plot = n
         
@@ -938,7 +1046,6 @@ class bpprModel:
         fig = plt.figure(figsize=(8, 6), dpi=100.0)
         lightblue = (0.55, 0.65, 0.8)
         darkgrey = (0.15, 0.15, 0.15)
-        red = 'firebrick'
         
         # Predicted v. actual
         fig.add_subplot(2, 2, 1)
@@ -949,7 +1056,7 @@ class bpprModel:
             alpha=0.5
             )
         plt.plot((min(y), max(y)), (min(post_mn), max(post_mn)),
-                 color = red)
+                 color = darkgrey)
         plt.xlabel('Actual Response')
         plt.ylabel('Predicted Response')
         plt.title(f'Accuracy: RMSE = {rmse:.{3}g}, $R^2 = ${R_squared:.{3}f}')
@@ -964,10 +1071,10 @@ class bpprModel:
                      label="Uncertainty Bound",
                      zorder=1)
         plt.scatter(list(range(n_plot)), y[idx_plot][idx_sort],
-                    s=5, color=red,
+                    s=5, color='firebrick',
                     label = 'Actual Response', zorder=2, alpha=0.5)
         plt.plot(list(range(n_plot)), post_mn[idx_plot][idx_sort],
-                    color='navy', label = 'Predicted Response', zorder=3)
+                    color=darkgrey, label = 'Predicted Response', zorder=3)
         plt.xlabel('Index')
         plt.ylabel('Response')
         plt.title(f'95% Intervals: Coverage = {100*coverage:.{1}f}%')
@@ -981,7 +1088,7 @@ class bpprModel:
             s=15,
             alpha=0.5
             )
-        plt.axhline(y = 0, color = red)
+        plt.axhline(y = 0, color = darkgrey)
         plt.xlabel('Predicted Response')
         plt.ylabel('Actual - Predicted Response')
         plt.title('Equal Variance and Lack of Trend')
@@ -1000,7 +1107,7 @@ class bpprModel:
             )
         plt.plot(xx, norm_pdf_xx,
                  linewidth=2,
-                 color=red
+                 color=darkgrey
                  )
         plt.xlabel('Residuals')
         plt.ylabel('Density')
@@ -1096,7 +1203,11 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
          df_spline=4, prob_relu=2/3, prior_coefs="zs", shape_var_coefs=None,
          scale_var_coefs=None, n_dat_min=None, scale_proj_dir_prop=None,
          adapt_act_feat=True, w_n_act=None, w_feat=None, n_post=1000,
-         n_burn=9000, n_adapt=0, n_thin=1, print_every=1000):
+         n_burn=9000, n_adapt=0, n_thin=1, silent=False):
+    
+    t0 = time.time()
+
+    
     # Organize input into data, prior, and specs
     data = bpprData(X, y)
     prior = bpprPrior(n_ridge_mean, n_ridge_max, n_act_max, df_spline,
@@ -1115,15 +1226,6 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
     
     # Initialize the posterior samples
     samples = bpprSamples(prior, specs, state)
-    
-    # printing setup
-    if print_every > 0:
-        start_time = time.time()
-        print_update(1, specs.n_draws, state.phase, time.time(), start_time, state.n_ridge)
-        silent = False
-    else:
-        print_every = specs.n_draws + 2
-        silent = True
         
     # Run MCMC
     if specs.n_draws > 1:
@@ -1137,9 +1239,6 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
             if it == (specs.n_pre):
                 state.phase = 'post-burn'
                 
-            if ((it % print_every) == 0)  or  ((it == specs.n_adapt  or  it == specs.n_pre) and not silent):
-                print_update(it + 1, specs.n_draws, state.phase, time.time(), start_time, state.n_ridge)
-                
             # Update the state
             state.update(data, prior, specs)
             
@@ -1147,9 +1246,13 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
                 # Write to samples
                 samples.writeState(state)
                 state.idx += 1
+                
+            if not silent and it % 500 == 0:
+                print('\rBayesPPR MCMC {:.1%} Complete'.format(it / specs.n_draws), end='')
 
+    t1 = time.time()
     if not silent:
-        print_update(specs.n_draws, specs.n_draws, state.phase, time.time(), start_time, state.n_ridge)
+        print('\rBayesPPR MCMC Complete. Time: {:f} seconds.'.format(t1 - t0))    
     
     model = bpprModel(data, prior, specs, samples)
     

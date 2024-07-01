@@ -22,7 +22,7 @@ mod.plot()
 mod.traceplot()
 
 # predict at new inputs (Xnew)
-X_test = np.random.rand(1000, p)
+X_test = np.random.rand(10000, p)
 y_test = np.random.normal(f(X_test), 1)
 
 pred = mod.predict(X_test)
