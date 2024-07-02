@@ -962,40 +962,53 @@ class bpprModel:
 
         return
     
-    def plot_sobol(self, labels=None):
+    def plot_sobol(self, labels=None, file=None):
         if labels is None:
-            labels = ['Var' + str(j+1) for j in range(self.data.p)]
+            labels = ['v' + str(j+1) for j in range(self.data.p)]
         
-        # Creating the bar plot
-        plt.figure(figsize=(10, 6))
+        lightblue = (0.55, 0.65, 0.8)
+        darkgrey = (0.15, 0.15, 0.15)
+        
+        # First-order Sobol'
         first_order = np.mean(self.first_order_sobol, axis=0)
-        plt.bar(labels, first_order, color='skyblue')
+        normalized_first_order = first_order / self.first_order_sobol.sum()
         
-        # Adding labels and title
-        plt.xlabel('Input Variable')
-        plt.ylabel("Sobol' Index")
-        plt.title("First-Order Sobol' Indices")
+        # Total-order Sobol'
+        total_order = np.mean(self.total_order_sobol, axis=0)
         
-        normalized_indices = [index / max_index for index in sobol_indices]
+        # Creating first-order barplot
+        fig, (ax1, ax3) = plt.subplots(1, 2, figsize=(10, 4))
         
-        # Creating the bar plot
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        
-        color = 'tab:blue'
         ax1.set_xlabel('Input Variable')
-        ax1.set_ylabel("Sobol' Index", color=color)
-        ax1.bar(input_variables, sobol_indices, color=color)
-        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.set_ylabel("Sobol' Index")
+        ax1.set_title("First-Order Sobol' Index")
+        ax1.bar(labels, first_order, color=darkgrey)
 
         # Instantiate a second axes that shares the same x-axis
         ax2 = ax1.twinx()  
-        color = 'tab:red'
-        ax2.set_ylabel('Normalized Index', color=color)  # we already handled the x-label with ax1
-        ax2.plot(input_variables, normalized_indices, color=color, marker='o', linestyle='None')
-        ax2.tick_params(axis='y', labelcolor=color)
+        ax2.set_ylabel("Normalized Sobol' Index")
+        ax2.plot(labels, normalized_first_order, marker='', linestyle='None')
+        ax2.set_ylim(0, normalized_first_order.max()*1.05)
         
-        # Display the plot
-        plt.show()
+        # Creating total-order barplot        
+        ax3.set_xlabel('Input Variable')
+        ax3.set_ylabel("Total Sobol'")
+        ax3.set_title("Total-Order Sobol' Index")
+        ax3.bar(labels, total_order, color=lightblue, label='Total-Order')
+        ax3.bar(labels, first_order, color=darkgrey, label='First-Order')
+        ax3.legend()        
+    
+        plt.tight_layout()
+    
+        if file is not None:
+            plt.savefig(file)
+        else:
+            plt.show()
+
+        plt.close(fig)
+        
+        return
+    
     
     def plot(self, X_test=None, y_test=None, n_plot=None, file=None):
         # Get X and y

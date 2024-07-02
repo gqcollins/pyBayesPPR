@@ -20,6 +20,8 @@ y = np.random.normal(f(X), 1)  # response (training set) with noise.
 mod = bppr(X, y)
 mod.plot()
 mod.traceplot()
+mod.sobol()
+mod.plot_sobol()
 
 # predict at new inputs (Xnew)
 X_test = np.random.rand(10000, p)
