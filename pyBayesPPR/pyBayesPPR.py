@@ -994,7 +994,7 @@ class bpprModel:
         ax3.set_xlabel('Input Variable')
         ax3.set_ylabel("Total Sobol'")
         ax3.set_title("Total-Order Sobol' Index")
-        ax3.bar(labels, total_order, color=lightblue, label='Total-Order')
+        ax3.bar(labels, total_order, color=lightblue, label='Higher-Order')
         ax3.bar(labels, first_order, color=darkgrey, label='First-Order')
         ax3.legend()        
     
