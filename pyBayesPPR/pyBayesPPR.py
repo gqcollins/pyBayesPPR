@@ -231,11 +231,14 @@ def get_log_mh_bd(n_ridge_prop, n_quant_prop, n_ridge_max):
 class qf_info:
     def __init__(self, BtB, Bty):
         """Get the quadratic form y'B solve(B'B) B'y, as well as least squares coefs and cholesky of B'B"""
-        self.dim = None; self.chol = None; self.ls_est = None; self.qf = None
+        self.dim = None
+        self.chol = None
+        self.ls_est = None
+        self.qf = None
         
         try:
             chol_BtB = sp.linalg.cholesky(BtB, lower=False)  # might be a better way to do this with sp.linalg.cho_factor
-        except np.linalg.LinAlgError:
+        except (np.linalg.LinAlgError, ValueError):
             return
         d = np.diag(chol_BtB)
         dim = len(d)
