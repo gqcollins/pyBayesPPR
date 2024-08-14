@@ -1109,7 +1109,7 @@ class bpprModel:
             )
         plt.axhline(y = 0, color = darkgrey)
         plt.xlabel('Predicted Response')
-        plt.ylabel('Actual - Predicted Response')
+        plt.ylabel('Residual')
         plt.title('Equal Variance and Lack of Trend')
         
         # Histogram of Residuals
@@ -1128,7 +1128,7 @@ class bpprModel:
                  linewidth=2,
                  color=darkgrey
                  )
-        plt.xlabel('Residuals')
+        plt.xlabel('Residual')
         plt.ylabel('Density')
         plt.title('Normality')
         
