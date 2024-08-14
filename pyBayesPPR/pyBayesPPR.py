@@ -1013,7 +1013,7 @@ class bpprModel:
         return
     
     
-    def plot(self, X_test=None, y_test=None, n_plot=None, file=None):
+    def plot(self, X_test=None, y_test=None, n_plot=None, coverage_target=0.95, file=None):
         # Get X and y
         if (X_test is None and y_test is not None) or (X_test is not None and y_test is None):
             raise ValueError("Both X_test and y_test should be specified or left as None.")
@@ -1049,11 +1049,14 @@ class bpprModel:
         rmse = np.std(resid)
         R_squared = 1 - rmse**2 / np.var(y)
         
+        # Get uq
         sd_samples = np.repeat(np.sqrt(self.samples.s2), n).reshape(mn_samples.shape)
         y_samples = np.random.normal(mn_samples, sd_samples)
-        post_lower = np.quantile(y_samples, 0.025, axis=0)
-        post_upper = np.quantile(y_samples, 0.975, axis=0)   
-        coverage = np.mean(np.logical_and(
+        q_lower = (1.0 - coverage_target)/2.0
+        q_upper = (1.0 + coverage_target)/2.0
+        post_lower = np.quantile(y_samples, q_lower, axis=0)
+        post_upper = np.quantile(y_samples, q_upper, axis=0)   
+        coverage_est = np.mean(np.logical_and(
             y >= post_lower,
             y <= post_upper
             ))
@@ -1093,7 +1096,7 @@ class bpprModel:
                     color=darkgrey, label = 'Predicted Response', zorder=3)
         plt.xlabel('Index')
         plt.ylabel('Response')
-        plt.title(f'95% Intervals: Coverage = {100*coverage:.{1}f}%')
+        plt.title(f'{100*coverage_target:.{1}f}% Intervals: Coverage = {100*coverage_est:.{1}f}%')
         plt.legend()
                 
         # Residuals v. Predicted
