@@ -1074,8 +1074,12 @@ class bpprModel:
             s=15,
             alpha=0.5
             )
-        plt.plot((min(y), max(y)), (min(post_mn), max(post_mn)),
-                 color = darkgrey)
+        ax = plt.gca() # get the current axis
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        ax.axline([0, 0], [1, 1], color=darkgrey)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
         plt.xlabel('Actual Response')
         plt.ylabel('Predicted Response')
         plt.title(f'Accuracy: RMSE = {rmse:.{3}g}, $R^2 = ${R_squared:.{3}f}')
