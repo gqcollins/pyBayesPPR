@@ -1265,7 +1265,7 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
             # Update the state
             state.update(data, prior, specs)
             
-            if state.phase == 'post-burn':
+            if state.phase == 'post-burn' and ((it-specs.n_burn) % specs.n_thin == 0):
                 # Write to samples
                 samples.writeState(state)
                 state.idx += 1
