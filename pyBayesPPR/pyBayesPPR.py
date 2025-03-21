@@ -1168,7 +1168,7 @@ class bpprModel:
         subchains = split_chain_into_subchains(self.samples.n_ridge, 4)
         if (np.var(subchains, axis=1) > 0).all():
             rhat = calculate_rhat(subchains)
-            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
+            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
         else:
             plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\hat{{R}}$ = NA')
         plt.legend()
