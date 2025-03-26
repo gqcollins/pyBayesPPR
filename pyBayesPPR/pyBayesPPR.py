@@ -1170,7 +1170,7 @@ class bpprModel:
             rhat = calculate_rhat(subchains)
             plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
         else:
-            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\hat{{R}}$ = NA')
+            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\\hat{{R}}$ = NA')
         plt.legend()
         
         # Residual Variance
@@ -1187,7 +1187,7 @@ class bpprModel:
         ess = effective_sample_size(self.samples.s2)
         subchains = split_chain_into_subchains(self.samples.s2, 4)
         rhat = calculate_rhat(subchains)
-        plt.title(f's2: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
+        plt.title(f's2: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
         plt.legend()
                 
         # Coefficient Variance
@@ -1207,7 +1207,7 @@ class bpprModel:
         ess = effective_sample_size(self.samples.var_coefs)
         subchains = split_chain_into_subchains(self.samples.var_coefs, 4)
         rhat = calculate_rhat(subchains)
-        plt.title(f'var_coefs: ESS = {ess:.{0}f}, $\hat{{R}}$ = {rhat:.{3}f}')
+        plt.title(f'var_coefs: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
         plt.legend()
         
         fig.tight_layout()
