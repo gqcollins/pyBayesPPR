@@ -205,11 +205,11 @@ def get_mns_basis(u, knots): # Get modified natural spline basis
       r = []
       d = []
       for k in range(1,n_knots):
-        r.append(relu(u - knots[k])**3)
+          r.append(relu(u - knots[k])**3)
       for k in range(df):
-        d.append((r[k] - r[df]) / (knots[df + 1] - knots[k + 1]))
+          d.append((r[k] - r[df]) / (knots[df + 1] - knots[k + 1]))
       for k in range(n_internal_knots):
-        basis = np.hstack([basis, d[k] - d[n_internal_knots]])
+          basis = np.hstack([basis, d[k] - d[n_internal_knots]])
     return basis
 
 def get_log_mh_bd(n_ridge_prop, n_quant_prop, n_ridge_max):
@@ -433,6 +433,9 @@ class bpprBirthProposal:
                 rg_knot0 = (max_knot0 - np.min(self.proj)) / prior.prob_relu
                 knot0 = max_knot0 - rg_knot0 * np.random.uniform()
                 self.knots = np.append([knot0], np.quantile(self.proj[self.proj > knot0], prior.knot_quants))  # Get proposed knots
+                if len(np.unique(self.knots)) < len(self.knots): # duplicates
+                    self.ridge_basis = None
+                    return
                 # Get proposed basis functions
                 self.ridge_basis = get_mns_basis(self.proj, self.knots)
                 self.n_basis = prior.df_spline
@@ -552,6 +555,9 @@ class bpprChangeProposal:
             rg_knot0 = (max_knot0 - np.min(self.proj)) / prior.prob_relu
             knot0 = max_knot0 - rg_knot0 * np.random.uniform()
             self.knots = np.append([knot0], np.quantile(self.proj[self.proj > knot0], prior.knot_quants))  # Get proposed knots
+            if len(np.unique(self.knots)) < len(self.knots): # duplicates
+                self.ridge_basis = None
+                return
             self.ridge_basis = get_mns_basis(self.proj, self.knots) # Get proposed basis function
         else:
             self.knots = [np.nan]
@@ -752,19 +758,19 @@ class bpprState:
         if move_type == 'birth':  
             # Generate birth proposal
             prop = bpprBirthProposal(self, data, prior, specs)
-            
-            # update quadratic forms just in case proposal is accepted
-            self.BtB[:self.n_basis_total, prop.basis_idx] = prop.BtP.copy()
-            self.BtB[prop.basis_idx, :self.n_basis_total] = prop.BtP.T.copy()
-            self.BtB[prop.basis_idx, prop.basis_idx] = prop.PtP.copy()
-            self.Bty[prop.basis_idx] = prop.Pty.copy()
-            
-            # Calculate log(MH acceptance probability)
-            prop.get_log_mh(self, data, prior)
-    
-            if prop.log_mh is not None:
-                if np.log(np.random.uniform()) < prop.log_mh:
-                    self.acceptBirth(prop, specs.adapt_act_feat)
+            if prop.ridge_basis is not None:
+                # update quadratic forms just in case proposal is accepted
+                self.BtB[:self.n_basis_total, prop.basis_idx] = prop.BtP.copy()
+                self.BtB[prop.basis_idx, :self.n_basis_total] = prop.BtP.T.copy()
+                self.BtB[prop.basis_idx, prop.basis_idx] = prop.PtP.copy()
+                self.Bty[prop.basis_idx] = prop.Pty.copy()
+                
+                # Calculate log(MH acceptance probability)
+                prop.get_log_mh(self, data, prior)
+        
+                if prop.log_mh is not None:
+                    if np.log(np.random.uniform()) < prop.log_mh:
+                        self.acceptBirth(prop, specs.adapt_act_feat)
     
         elif move_type == 'death':  # Death step
             # Generate death proposal
@@ -780,13 +786,13 @@ class bpprState:
         else:  # Change Step
             # Generate change proposal
             prop = bpprChangeProposal(self, data, prior, specs)
-            
-            # Calculate log(MH acceptance probability)
-            prop.get_log_mh(self, data, prior)
-    
-            if prop.log_mh is not None:
-                if np.log(np.random.uniform()) < prop.log_mh:
-                    self.acceptChange(prop)
+            if prop.ridge_basis is not None:
+                # Calculate log(MH acceptance probability)
+                prop.get_log_mh(self, data, prior)
+        
+                if prop.log_mh is not None:
+                    if np.log(np.random.uniform()) < prop.log_mh:
+                        self.acceptChange(prop)
     
         if self.phase != 'adapt':
             self.sampleSDResid(data)
