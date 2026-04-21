@@ -163,10 +163,7 @@ def dwallenius(w_feat_norm, feat):
 def get_cat_basis(Xj):
     p = np.shape(Xj)[1]
     if p > 1:
-        tp = (1 - Xj[:, 0])
-        for j in range(1,p):
-            tp *= (1 - Xj[:, j])
-        basis = 1 - tp
+        basis = 1 - np.prod(1 - Xj, axis=1, keepdims=True)
     else:
         basis = Xj.copy()
     return basis
@@ -890,7 +887,7 @@ class bpprModel:
                                 n_act != self.samples.n_act[mcmc_use[i-1]][j] or
                                 np.any(proj_dir != self.samples.proj_dir[mcmc_use[i-1]][j][:n_act])):
                                     feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
-                                    ridge_basis[j] = newdata_s[:, feat] @ proj_dir
+                                    ridge_basis[j] = (newdata_s[:, feat] @ proj_dir)[:, None]
                     # Add predictions for jth basis function
                     preds[i] += ridge_basis[j] @ self.samples.coefs[mcmc_use[i], basis_idx]
 
