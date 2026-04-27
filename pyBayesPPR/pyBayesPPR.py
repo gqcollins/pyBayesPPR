@@ -877,10 +877,11 @@ class bpprModel:
                     else: # No continuous features in this basis
                         basis_idx = slice(basis_idx.stop, basis_idx.stop + 1)
                         n_act = self.samples.n_act[mcmc_use[i]][j]
-                        if self.samples.ridge_type[j] == "cat": # all categorical features in this basis
-                            if calc_all_bases:
-                                feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
-                                ridge_basis[j] = get_cat_basis(newdata_s[:, feat])
+                        if self.samples.ridge_type[mcmc_use[i]][j] == "cat": # all categorical features in this basis
+                            if (calc_all_bases  or
+                                n_act != self.samples.n_act[mcmc_use[i-1]][j]):
+                                    feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
+                                    ridge_basis[j] = get_cat_basis(newdata_s[:, feat])
                         else:  # some discrete quantitative features in this basis
                             proj_dir = self.samples.proj_dir[mcmc_use[i]][j][:n_act].copy()
                             if (calc_all_bases or
