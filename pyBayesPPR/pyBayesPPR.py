@@ -440,7 +440,7 @@ class bpprBirthProposal:
             else:
                 self.ridge_type = 'disc'
                 self.knots = [np.nan]
-                self.ridge_basis = self.proj.copy()
+                self.ridge_basis = self.proj[:, None].copy()
                 self.n_basis = 1
 
         # inner product of proposed new basis functions
@@ -558,7 +558,7 @@ class bpprChangeProposal:
             self.ridge_basis = get_mns_basis(self.proj, self.knots) # Get proposed basis function
         else:
             self.knots = [np.nan]
-            self.ridge_basis = self.proj.copy()
+            self.ridge_basis = self.proj[:, None].copy()
 
         # inner product of proposed new basis functions
         PtP = self.ridge_basis.T @ self.ridge_basis
