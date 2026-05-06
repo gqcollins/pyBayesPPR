@@ -67,7 +67,7 @@ jobs:
           prerelease: false
   
   upload_pypi:
-    needs: [build_sdist, build_wheels]
+    needs: [build_sdist]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
