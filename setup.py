@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='pyBayesPPR',
-    version='1.0.1',
+    version='1.0.2',
     description='Bayesian Projection Pursuit Regression',
     url='https://github.com/gqcollins/pyBayesPPR.git',
     author='Gavin Collins',
