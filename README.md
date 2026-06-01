@@ -2,6 +2,8 @@
 [![Build Status][build-status-img]](https://github.com/gqcollins/pyBayesPPR/actions)
 [![PyPI version](https://badge.fury.io/py/pyBayesPPR/.svg)](https://badge.fury.io/py/pyBayesPPR/)
 
+![](logo.png)
+
 A python implementation of Bayesian Projection Pursuit Regression (BayesPPR).
 
 ## Installation
