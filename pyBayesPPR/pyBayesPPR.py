@@ -1255,27 +1255,26 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
     samples = bpprSamples(prior, specs, state)
         
     # Run MCMC
-    if specs.n_draws > 1:
-        for it in range(1, specs.n_draws):
-            if it == (specs.n_adapt):
-                if specs.n_burn > 0:
-                    state.phase = 'burn'
-                else:
-                    state.phase = 'post-burn'
-                    
-            if it == (specs.n_pre):
+    for it in range(specs.n_draws):
+        if it == (specs.n_adapt):
+            if specs.n_burn > 0:
+                state.phase = 'burn'
+            else:
                 state.phase = 'post-burn'
                 
-            # Update the state
-            state.update(data, prior, specs)
+        if it == (specs.n_pre):
+            state.phase = 'post-burn'
             
-            if state.phase == 'post-burn' and ((it-specs.n_burn) % specs.n_thin == 0):
-                # Write to samples
-                samples.writeState(state)
-                state.idx += 1
-                
-            if not silent and it % 500 == 0:
-                print('\rBayesPPR MCMC {:.1%} Complete'.format(it / specs.n_draws), end='')
+        # Update the state
+        state.update(data, prior, specs)
+        
+        if state.phase == 'post-burn' and ((it-specs.n_burn) % specs.n_thin == 0):
+            # Write to samples
+            samples.writeState(state)
+            state.idx += 1
+            
+        if not silent and it % 500 == 0:
+            print('\rBayesPPR MCMC {:.1%} Complete'.format(it / specs.n_draws), end='')
 
     t1 = time.time()
     if not silent:
