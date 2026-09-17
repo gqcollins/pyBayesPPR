@@ -121,10 +121,14 @@ def calculate_rhat(chains):
     """
     chains = np.array(chains)  # Ensure chains is a numpy array for easier manipulation
     num_chains, num_samples = chains.shape
-    
+    if num_chains < 2 or num_samples < 2:
+        return np.nan  # Not enough samples to split into informative subchains
+
     # Step 1: Calculate the within-chain variance
     W = np.mean(np.var(chains, axis=1, ddof=1))
-    
+    if not W > 0:
+        return np.nan  # No within-chain variability, so R-hat is undefined
+
     # Step 2: Calculate the between-chain variance
     chain_means = np.mean(chains, axis=1)
     B = np.var(chain_means, ddof=1) * num_samples
@@ -286,10 +290,14 @@ class bpprPrior:
             self.n_dat_min = self.df_spline + 1
         self.p_dat_max = 1.0 - self.n_dat_min / data.n 
         
+        n_cat = int(np.sum(data.feat_type == 'cat'))
+        n_usable = int(np.sum(data.feat_type != ''))  # constant features are never active
         if self.n_act_max is None:
-            n_cat = np.sum(data.feat_type == np.repeat('cat', data.p))
-            self.n_act_max = int(min(3, data.p - n_cat) + min(3, np.ceil(n_cat/2)))
-        
+            self.n_act_max = int(min(3, n_usable - n_cat) + min(3, np.ceil(n_cat/2)))
+        # Cannot activate more features than are available to propose
+        self.n_act_max = min(self.n_act_max, n_usable)
+        assert self.n_act_max > 0, 'n_act_max <= 0. All features may be constant.'
+
         self.proj_dir_mn = [np.repeat(1/np.sqrt(a), a) for a in range(1, self.n_act_max+1)] # prior mean for proj_dir (arbitrary, since prior precision is zero)
         
         if self.n_ridge_max is None:
@@ -300,8 +308,8 @@ class bpprPrior:
     
 class bpprData:
     def __init__(self, X, y):
-        self.X = X.copy()
-        self.y = y.copy()
+        self.X = np.asarray(X, dtype=float).copy()
+        self.y = np.asarray(y, dtype=float).copy()
         return
 
     def summarize(self, prior):
@@ -328,13 +336,14 @@ class bpprData:
         return
         
     def standardize(self, X=None):
+        # Cast to float so that integer inputs are not truncated on assignment
         if X is None: # get standardized version of self.X
-            self.X_st = self.X.copy()
+            self.X_st = np.asarray(self.X, dtype=float).copy()
             for j in range(self.p):
                 self.X_st[:, j] = (self.X[:, j] - self.mn_X[j]) / self.sd_X[j]
             return
         else: # return standardized version of X
-            X_st = X.copy()
+            X_st = np.asarray(X, dtype=float).copy()
             for j in range(self.p):
                 X_st[:, j] = (X[:, j] - self.mn_X[j]) / self.sd_X[j]
             return X_st
@@ -373,19 +382,21 @@ class bpprSpecs:
         return
     
     def calibrate(self, data, prior):
-        for j,ft in enumerate(data.feat_type):
-            if ft == '':
-                self.w_feat[j] == 0.0
-        
         if prior.prior_coefs == 'flat':
             self.n_adapt = self.n_pre
             self.n_burn = 0
-        
+
         if self.w_n_act is None:
-            self.w_n_act = np.ones(prior.n_act_max) 
-        
+            self.w_n_act = np.ones(prior.n_act_max)
+
         if self.w_feat is None:
-            self.w_feat = np.ones(data.p)  # assign later
+            self.w_feat = np.ones(data.p)
+        else:
+            self.w_feat = np.asarray(self.w_feat, dtype=float)
+
+        # Constant features carry no information, so give them zero weight
+        self.w_feat[data.feat_type == ''] = 0.0
+        assert np.sum(self.w_feat) > 0, 'No features have positive weight. All features may be constant.'
         return
     
     
@@ -829,7 +840,7 @@ class bpprSamples:
         self.knots[state.idx] = state.knots.copy()
         self.coefs[state.idx] = state.coefs.copy()
         self.s2[state.idx] = state.s2
-        if state.var_coefs is not None:
+        if self.var_coefs is not None:
             self.var_coefs[state.idx] = state.var_coefs
         return
 
@@ -845,52 +856,62 @@ class bpprModel:
         return
 
     def predict(self, newdata, mcmc_use=None):
+        newdata = np.asarray(newdata, dtype=float)
         n, p = np.shape(newdata)
+        assert p == self.data.p, "'newdata' must have the same number of columns as the training data"
 
         newdata_s = self.data.standardize(newdata)
-        
+
         if mcmc_use is None:
-            mcmc_use = np.array(range(self.specs.n_keep))
+            mcmc_use = np.arange(self.specs.n_keep)
         else:
-            assert max(mcmc_use) <= self.specs.n_keep, "invalid 'mcmc_use'"
+            mcmc_use = np.atleast_1d(np.asarray(mcmc_use, dtype=int))
+            assert mcmc_use.min() >= 0 and mcmc_use.max() < self.specs.n_keep, "invalid 'mcmc_use'"
         n_use = len(mcmc_use)
-        
-        ridge_basis = [None] * np.max(self.samples.n_ridge) 
+
+        ridge_basis = [None] * max(int(np.max(self.samples.n_ridge)), 1)
         preds = np.zeros((n_use, n))
         for i in range(n_use):
-            preds[i] = self.samples.coefs[mcmc_use[i], 0]
-            calc_all_bases = (i == 0) or (self.samples.n_ridge[mcmc_use[i]] != self.samples.n_ridge[mcmc_use[i-1]])
-            if self.samples.n_ridge[mcmc_use[i]] > 0:
+            idx = mcmc_use[i]
+            idx_prev = mcmc_use[i-1]
+            preds[i] = self.samples.coefs[idx, 0]
+            calc_all_bases = (i == 0) or (self.samples.n_ridge[idx] != self.samples.n_ridge[idx_prev])
+            if self.samples.n_ridge[idx] > 0:
                 basis_idx = slice(0, 1)
-                for j in range(self.samples.n_ridge[mcmc_use[i]]):
-                    if self.samples.ridge_type[mcmc_use[i]][j] == "cont":
+                for j in range(self.samples.n_ridge[idx]):
+                    ridge_type = self.samples.ridge_type[idx][j]
+                    n_act = self.samples.n_act[idx][j]
+                    feat = self.samples.feat[idx][j][:n_act].copy()
+                    proj_dir = self.samples.proj_dir[idx][j][:n_act].copy()
+                    knots = self.samples.knots[idx][j].copy()
+
+                    # Does this ridge function differ from the one already computed for
+                    # index j? Only compare fields that are meaningful for its type --
+                    # proj_dir and knots are nan for 'cat', and knots are nan for 'disc'.
+                    changed = calc_all_bases or (
+                        ridge_type != self.samples.ridge_type[idx_prev][j] or
+                        n_act != self.samples.n_act[idx_prev][j] or
+                        np.any(feat != self.samples.feat[idx_prev][j][:n_act])
+                        )
+                    if not changed and ridge_type != 'cat':
+                        changed = np.any(proj_dir != self.samples.proj_dir[idx_prev][j][:n_act])
+                    if not changed and ridge_type == 'cont':
+                        changed = np.any(knots != self.samples.knots[idx_prev][j])
+
+                    if ridge_type == 'cont':
                         basis_idx = slice(basis_idx.stop, basis_idx.stop + self.prior.df_spline)
-                        n_act = self.samples.n_act[mcmc_use[i]][j]
-                        knots = self.samples.knots[mcmc_use[i]][j].copy()
-                        if (calc_all_bases or
-                            n_act != self.samples.n_act[mcmc_use[i-1]][j] or
-                            knots[0] != self.samples.knots[mcmc_use[i-1]][j][0]):
-                                feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
-                                proj_dir = self.samples.proj_dir[mcmc_use[i]][j][:n_act].copy()
-                                proj = newdata_s[:, feat] @ proj_dir
-                                ridge_basis[j] = get_mns_basis(proj, knots) # Get basis function
+                        if changed:
+                            proj = newdata_s[:, feat] @ proj_dir
+                            ridge_basis[j] = get_mns_basis(proj, knots) # Get basis function
                     else: # No continuous features in this basis
                         basis_idx = slice(basis_idx.stop, basis_idx.stop + 1)
-                        n_act = self.samples.n_act[mcmc_use[i]][j]
-                        if self.samples.ridge_type[mcmc_use[i]][j] == "cat": # all categorical features in this basis
-                            if (calc_all_bases  or
-                                n_act != self.samples.n_act[mcmc_use[i-1]][j]):
-                                    feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
-                                    ridge_basis[j] = get_cat_basis(newdata_s[:, feat])
-                        else:  # some discrete quantitative features in this basis
-                            proj_dir = self.samples.proj_dir[mcmc_use[i]][j][:n_act].copy()
-                            if (calc_all_bases or
-                                n_act != self.samples.n_act[mcmc_use[i-1]][j] or
-                                np.any(proj_dir != self.samples.proj_dir[mcmc_use[i-1]][j][:n_act])):
-                                    feat = self.samples.feat[mcmc_use[i]][j][:n_act].copy()
-                                    ridge_basis[j] = (newdata_s[:, feat] @ proj_dir)[:, None]
+                        if changed:
+                            if ridge_type == 'cat': # all categorical features in this basis
+                                ridge_basis[j] = get_cat_basis(newdata_s[:, feat])
+                            else:  # some discrete quantitative features in this basis
+                                ridge_basis[j] = (newdata_s[:, feat] @ proj_dir)[:, None]
                     # Add predictions for jth basis function
-                    preds[i] += ridge_basis[j] @ self.samples.coefs[mcmc_use[i], basis_idx]
+                    preds[i] += ridge_basis[j] @ self.samples.coefs[idx, basis_idx]
 
         return preds
     
@@ -978,7 +999,7 @@ class bpprModel:
         
         # First-order Sobol'
         first_order = np.mean(self.first_order_sobol, axis=0)
-        normalized_first_order = first_order / self.first_order_sobol.sum()
+        normalized_first_order = first_order / first_order.sum()
         
         # Total-order Sobol'
         total_order = np.mean(self.total_order_sobol, axis=0)
@@ -1050,7 +1071,8 @@ class bpprModel:
         post_mn = np.mean(mn_samples, axis=0)
         resid = y - post_mn
         bias = np.mean(resid)
-        rmse = np.std(resid)
+        rmse = np.sqrt(np.mean(resid**2))  # includes bias, unlike np.std(resid)
+        sd_resid = np.std(resid)
         R_squared = 1 - rmse**2 / np.var(y)
         
         # Get uq
@@ -1059,11 +1081,16 @@ class bpprModel:
         q_lower = (1.0 - coverage_target)/2.0
         q_upper = (1.0 + coverage_target)/2.0
         post_lower = np.quantile(y_samples, q_lower, axis=0)
-        post_upper = np.quantile(y_samples, q_upper, axis=0)   
+        post_upper = np.quantile(y_samples, q_upper, axis=0)
         coverage_est = np.mean(np.logical_and(
             y >= post_lower,
             y <= post_upper
             ))
+        # post_mn averages the noiseless predictions while the bounds are quantiles of
+        # the noisy draws, so with few posterior samples post_mn can fall outside them.
+        # Clip (after estimating coverage) so the errorbar deltas are never negative.
+        post_lower_plot = np.minimum(post_lower, post_mn)
+        post_upper_plot = np.maximum(post_upper, post_mn)
         
         # make plots
         fig = plt.figure(figsize=(8, 6), dpi=100.0)
@@ -1092,8 +1119,8 @@ class bpprModel:
         fig.add_subplot(2, 2, 2)
         idx_sort = np.argsort(post_mn[idx_plot])
         plt.errorbar(list(range(n_plot)), post_mn[idx_plot][idx_sort],
-                     [post_mn[idx_plot][idx_sort] - post_lower[idx_plot][idx_sort],
-                      post_upper[idx_plot][idx_sort] - post_mn[idx_plot][idx_sort]],
+                     [post_mn[idx_plot][idx_sort] - post_lower_plot[idx_plot][idx_sort],
+                      post_upper_plot[idx_plot][idx_sort] - post_mn[idx_plot][idx_sort]],
                      fmt='none', color=lightblue,
                      label="Uncertainty Bound",
                      zorder=1)
@@ -1123,7 +1150,7 @@ class bpprModel:
         # Histogram of Residuals
         fig.add_subplot(2, 2, 4)
         xx = np.linspace(min(resid), max(resid), 100)
-        norm_pdf_xx = stats.norm.pdf(xx, bias, rmse)
+        norm_pdf_xx = stats.norm.pdf(xx, bias, sd_resid)
         plt.hist(
             resid,
             color = lightblue,
@@ -1156,64 +1183,37 @@ class bpprModel:
         fig = plt.figure(figsize=(8, 6), dpi=100.0)
         lightblue = (0.55, 0.65, 0.8)
         darkgrey = (0.15, 0.15, 0.15)
-        
+
+        def trace_panel(position, chain, ylabel, name):
+            fig.add_subplot(2, 2, position)
+            plt.plot(
+                chain,
+                color=lightblue,
+                label = 'Samples'
+                )
+            plt.axhline(y = np.mean(chain),
+                        color = darkgrey, label = 'Mean')
+            plt.xlabel('MCMC Iteration')
+            plt.ylabel(ylabel)
+            ess = effective_sample_size(chain)
+            rhat = calculate_rhat(split_chain_into_subchains(chain, 4))
+            if np.isnan(rhat):
+                plt.title(f'{name}: ESS = {ess:.{0}f}, $\\hat{{R}}$ = NA')
+            else:
+                plt.title(f'{name}: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
+            plt.legend()
+            return
+
         # Number of ridge functions
-        fig.add_subplot(2, 2, 1)
-        plt.plot(
-            self.samples.n_ridge,
-            color=lightblue,
-            label = 'Samples'
-            )
-        plt.axhline(y = np.mean(self.samples.n_ridge),
-                    color = darkgrey, label = 'Mean')
-        plt.xlabel('MCMC Iteration')
-        plt.ylabel('Number of Ridge Functions')
-        ess = effective_sample_size(self.samples.n_ridge)
-        subchains = split_chain_into_subchains(self.samples.n_ridge, 4)
-        if (np.var(subchains, axis=1) > 0).all():
-            rhat = calculate_rhat(subchains)
-            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
-        else:
-            plt.title(f'n_ridge: ESS = {ess:.{0}f}, $\\hat{{R}}$ = NA')
-        plt.legend()
-        
+        trace_panel(1, self.samples.n_ridge, 'Number of Ridge Functions', 'n_ridge')
+
         # Residual Variance
-        fig.add_subplot(2, 2, 2)
-        plt.plot(
-            self.samples.s2,
-            color=lightblue,
-            label = 'Samples'
-            )
-        plt.axhline(y = np.mean(self.samples.s2),
-                    color = darkgrey, label = 'Mean')
-        plt.xlabel('MCMC Iteration')
-        plt.ylabel('Residual Variance')
-        ess = effective_sample_size(self.samples.s2)
-        subchains = split_chain_into_subchains(self.samples.s2, 4)
-        rhat = calculate_rhat(subchains)
-        plt.title(f's2: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
-        plt.legend()
-                
-        # Coefficient Variance
-        fig.add_subplot(2, 2, 3)
-        ess = effective_sample_size(self.samples.var_coefs)
-        subchains = split_chain_into_subchains(self.samples.var_coefs, 4)
-        rhat = calculate_rhat(subchains)
-        plt.plot(
-            self.samples.var_coefs,
-            color=lightblue,
-            label = 'Samples'
-            )
-        plt.axhline(y = np.mean(self.samples.var_coefs),
-                    color = darkgrey, label = 'Mean')
-        plt.xlabel('MCMC Iteration')
-        plt.ylabel('Variance of Basis Coefficients')
-        ess = effective_sample_size(self.samples.var_coefs)
-        subchains = split_chain_into_subchains(self.samples.var_coefs, 4)
-        rhat = calculate_rhat(subchains)
-        plt.title(f'var_coefs: ESS = {ess:.{0}f}, $\\hat{{R}}$ = {rhat:.{3}f}')
-        plt.legend()
-        
+        trace_panel(2, self.samples.s2, 'Residual Variance', 's2')
+
+        # Coefficient Variance (not sampled under the flat prior)
+        if self.samples.var_coefs is not None:
+            trace_panel(3, self.samples.var_coefs, 'Variance of Basis Coefficients', 'var_coefs')
+
         fig.tight_layout()
 
         if file is not None:
@@ -1261,7 +1261,10 @@ def bppr(X, y, n_ridge_mean=10.0, n_ridge_max=None, n_act_max=None,
                 state.phase = 'burn'
             else:
                 state.phase = 'post-burn'
-                
+            # The adapt phase skips get_inv_chol, so the current qf_info may
+            # not have it yet; sampleCoefs needs it from here on
+            state.qf_info.get_inv_chol()
+
         if it == (specs.n_pre):
             state.phase = 'post-burn'
             
