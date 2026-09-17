@@ -1,6 +1,6 @@
 # pyBayesPPR
-[![Build Status][build-status-img]](https://github.com/gqcollins/pyBayesPPR/actions)
-[![PyPI version](https://badge.fury.io/py/pyBayesPPR/.svg)](https://badge.fury.io/py/pyBayesPPR/)
+![Build Status][build-status-img]](https://github.com/gqcollins/pyBayesPPR/actions)
+![PyPI version](https://badge.fury.io/py/pyBayesPPR/.svg)](https://badge.fury.io/py/pyBayesPPR/)
 
 ![](logo.png)
 
