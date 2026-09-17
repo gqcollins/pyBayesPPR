@@ -4,7 +4,7 @@ A python package for Bayesian Projection Pursuit Regression
 """
 __all__ = ["bppr", "bpprModel"]
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 import sys
 

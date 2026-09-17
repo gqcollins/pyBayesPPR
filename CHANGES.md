@@ -1,3 +1,6 @@
+# pyBayesPPR 1.0.3
+* bugfixes
+
 # pyBayesPPR 1.0.2
 * fix actions and upload to pypi
 
