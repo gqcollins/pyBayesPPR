@@ -26,6 +26,8 @@ jobs:
         pip install -r requirements.txt
         pip install .
         pip install pytest
+    - name: Run tests
+      run: pytest
   
   build_sdist:
     needs: [build]
